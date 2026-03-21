@@ -27,14 +27,14 @@ jobs:
       #     exclude: .git*,node_modules,*.DS_Store,*.github
 
       # Add more deployment steps as needed
-      - name: Deploy via SSH (git pull)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT != '' && secrets.SSH_PORT || 22 }}
-          script: |
-            cd /domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
-            pwd
-            git pull origin main
+      # - name: Deploy via SSH (git pull)
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: ${{ secrets.SSH_HOST }}
+      #     username: ${{ secrets.SSH_USER }}
+      #     password: ${{ secrets.SSH_PRIVATE_KEY }}
+      #     port: ${{ secrets.SSH_PORT != '' && secrets.SSH_PORT || 22 }}
+      #     script: |
+      #       cd /domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
+      #       pwd
+      #       git pull origin main
