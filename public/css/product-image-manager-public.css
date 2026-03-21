@@ -708,7 +708,10 @@
 }
 
 .pim-actions {
-    display: grid;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
     align-self: stretch;
     min-width: 156px;
