@@ -17,9 +17,14 @@ class Product_Image_Manager_Ajax_Controller
     {
         check_ajax_referer('pim_ajax_nonce', 'nonce');
 
-        if (!current_user_can('manage_woocommerce')) {
+        if (!$this->can_access_manager()) {
             wp_send_json_error(array('message' => __('Unauthorized request.', 'product-image-manager')), 403);
         }
+    }
+
+    private function can_access_manager()
+    {
+        return current_user_can('manage_woocommerce') || current_user_can('edit_products');
     }
 
     public function load_products()

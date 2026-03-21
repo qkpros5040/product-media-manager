@@ -320,8 +320,13 @@ class Product_Image_Manager_GraphQL
 
     private function authorize_graphql()
     {
-        if (!current_user_can('manage_woocommerce')) {
+        if (!$this->can_access_manager()) {
             throw new GraphQL\Error\UserError(__('Unauthorized request.', 'product-image-manager'));
         }
+    }
+
+    private function can_access_manager()
+    {
+        return current_user_can('manage_woocommerce') || current_user_can('edit_products');
     }
 }

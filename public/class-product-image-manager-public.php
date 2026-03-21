@@ -36,6 +36,10 @@ class Product_Image_Manager_Public
             return;
         }
 
+        if (!$this->can_access_manager()) {
+            return;
+        }
+
         $selected_categories = array_map('absint', get_option('pim_selected_categories', array()));
         $terms = get_terms(array(
             'taxonomy' => 'product_cat',
@@ -63,11 +67,12 @@ class Product_Image_Manager_Public
 
         wp_localize_script($this->plugin_name . '-public', 'pimConfig', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'graphqlUrl' => site_url('/graphql'),
+            'graphqlUrl' => home_url('/graphql'),
             'nonce' => wp_create_nonce('pim_ajax_nonce'),
+            'restNonce' => wp_create_nonce('wp_rest'),
             'selectedCategories' => $selected_categories,
             'bootstrapCategories' => $bootstrap_categories,
-            'canManage' => current_user_can('manage_woocommerce'),
+            'canManage' => $this->can_access_manager(),
             'hasWpGraphql' => function_exists('register_graphql_field'),
             'hasGraphqlUpload' => class_exists('WPGraphQL') && method_exists('WPGraphQL', 'get_type_registry') && is_object(WPGraphQL::get_type_registry()) && method_exists(WPGraphQL::get_type_registry(), 'get_type') && (bool) WPGraphQL::get_type_registry()->get_type('Upload'),
             'messages' => array(
@@ -84,12 +89,17 @@ class Product_Image_Manager_Public
 
     public function render_shortcode()
     {
-        if (!is_user_logged_in() || !current_user_can('manage_woocommerce')) {
+        if (!is_user_logged_in() || !$this->can_access_manager()) {
             return '<p>' . esc_html__('You do not have permission to access Product Image Manager.', 'product-image-manager') . '</p>';
         }
 
         ob_start();
         include PIM_PLUGIN_DIR . 'public/views/app.php';
         return ob_get_clean();
+    }
+
+    private function can_access_manager()
+    {
+        return current_user_can('manage_woocommerce') || current_user_can('edit_products');
     }
 }

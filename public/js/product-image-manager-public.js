@@ -20,7 +20,9 @@
             method: 'POST',
             credentials: 'same-origin',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'X-WP-Nonce': pimConfig.restNonce || '',
+                'X-PIM-Nonce': pimConfig.nonce || ''
             },
             body: JSON.stringify({
                 query: query,
@@ -34,6 +36,29 @@
         }
 
         return payload.data || {};
+    }
+
+    async function requestLegacy(action, payload) {
+        var formData = new FormData();
+        formData.append('action', action);
+        formData.append('nonce', pimConfig.nonce);
+
+        Object.keys(payload || {}).forEach(function (key) {
+            formData.append(key, String(payload[key]));
+        });
+
+        var response = await fetch(pimConfig.ajaxUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: formData
+        });
+
+        var data = await response.json();
+        if (!data.success) {
+            throw new Error((data.data && data.data.message) || 'Request failed.');
+        }
+
+        return data.data || {};
     }
 
     async function uploadFilesLegacy(productId, files) {
@@ -82,6 +107,10 @@
         var response = await fetch(pimConfig.graphqlUrl, {
             method: 'POST',
             credentials: 'same-origin',
+            headers: {
+                'X-WP-Nonce': pimConfig.restNonce || '',
+                'X-PIM-Nonce': pimConfig.nonce || ''
+            },
             body: formData
         });
 
@@ -169,13 +198,33 @@
 
             async function loadProducts() {
                 try {
-                    var data = await requestGraphQL(
-                        'query PIMProducts($categoryId: Int!, $search: String) { pimProducts(categoryId: $categoryId, search: $search) { id name hasImages } }',
-                        { categoryId: selectedCategory.id, search: search }
-                    );
-                    setProducts(data.pimProducts || []);
+                    if (pimConfig.hasWpGraphql) {
+                        var data = await requestGraphQL(
+                            'query PIMProducts($categoryId: Int!, $search: String) { pimProducts(categoryId: $categoryId, search: $search) { id name hasImages } }',
+                            { categoryId: selectedCategory.id, search: search }
+                        );
+                        setProducts(data.pimProducts || []);
+                        return;
+                    }
+
+                    var legacyData = await requestLegacy('pim_load_products', {
+                        categoryId: selectedCategory.id,
+                        search: search || ''
+                    });
+
+                    setProducts(legacyData.products || []);
                 } catch (error) {
-                    setStatus(error.message);
+                    try {
+                        var fallbackData = await requestLegacy('pim_load_products', {
+                            categoryId: selectedCategory.id,
+                            search: search || ''
+                        });
+
+                        setProducts(fallbackData.products || []);
+                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
+                    } catch (fallbackError) {
+                        setStatus(fallbackError.message || error.message);
+                    }
                 }
             }
 
@@ -184,37 +233,87 @@
 
         async function fetchImages(activeProductId) {
             try {
-                var data = await requestGraphQL(
-                    'query PIMProductImages($productId: Int!) { pimProductImages(productId: $productId) { featuredId images { id url fileName isFeatured } } }',
-                    { productId: activeProductId }
-                );
-                setImages((data.pimProductImages && data.pimProductImages.images) || []);
+                if (pimConfig.hasWpGraphql) {
+                    var data = await requestGraphQL(
+                        'query PIMProductImages($productId: Int!) { pimProductImages(productId: $productId) { featuredId images { id url fileName isFeatured } } }',
+                        { productId: activeProductId }
+                    );
+                    setImages((data.pimProductImages && data.pimProductImages.images) || []);
+                    return;
+                }
+
+                var legacyData = await requestLegacy('pim_load_product_images', {
+                    productId: activeProductId
+                });
+                setImages(legacyData.images || []);
             } catch (error) {
-                setStatus(error.message);
+                try {
+                    var fallbackData = await requestLegacy('pim_load_product_images', {
+                        productId: activeProductId
+                    });
+                    setImages(fallbackData.images || []);
+                    setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
+                } catch (fallbackError) {
+                    setStatus(fallbackError.message || error.message);
+                }
             }
         }
 
         async function onDetach(attachmentId) {
             try {
-                await requestGraphQL(
-                    'mutation PIMDetach($productId: Int!, $attachmentId: Int!) { pimDetachProductImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
-                    { productId: selectedProduct.id, attachmentId: attachmentId }
-                );
+                if (pimConfig.hasWpGraphql) {
+                    await requestGraphQL(
+                        'mutation PIMDetach($productId: Int!, $attachmentId: Int!) { pimDetachProductImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
+                        { productId: selectedProduct.id, attachmentId: attachmentId }
+                    );
+                } else {
+                    await requestLegacy('pim_detach_product_image', {
+                        productId: selectedProduct.id,
+                        attachmentId: attachmentId
+                    });
+                }
+
                 await fetchImages(selectedProduct.id);
             } catch (error) {
-                setStatus(error.message);
+                try {
+                    await requestLegacy('pim_detach_product_image', {
+                        productId: selectedProduct.id,
+                        attachmentId: attachmentId
+                    });
+                    await fetchImages(selectedProduct.id);
+                    setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Action completed with fallback.');
+                } catch (fallbackError) {
+                    setStatus(fallbackError.message || error.message);
+                }
             }
         }
 
         async function onSetFeatured(attachmentId) {
             try {
-                await requestGraphQL(
-                    'mutation PIMSetFeatured($productId: Int!, $attachmentId: Int!) { pimSetFeaturedImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
-                    { productId: selectedProduct.id, attachmentId: attachmentId }
-                );
+                if (pimConfig.hasWpGraphql) {
+                    await requestGraphQL(
+                        'mutation PIMSetFeatured($productId: Int!, $attachmentId: Int!) { pimSetFeaturedImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
+                        { productId: selectedProduct.id, attachmentId: attachmentId }
+                    );
+                } else {
+                    await requestLegacy('pim_set_featured_image', {
+                        productId: selectedProduct.id,
+                        attachmentId: attachmentId
+                    });
+                }
+
                 await fetchImages(selectedProduct.id);
             } catch (error) {
-                setStatus(error.message);
+                try {
+                    await requestLegacy('pim_set_featured_image', {
+                        productId: selectedProduct.id,
+                        attachmentId: attachmentId
+                    });
+                    await fetchImages(selectedProduct.id);
+                    setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Action completed with fallback.');
+                } catch (fallbackError) {
+                    setStatus(fallbackError.message || error.message);
+                }
             }
         }
 
@@ -254,6 +353,22 @@
                 setStatus('Upload complete.');
                 await fetchImages(selectedProduct.id);
             } catch (error) {
+                if (pimConfig.hasGraphqlUpload) {
+                    try {
+                        var legacyResponse = await uploadFilesLegacy(selectedProduct.id, uploadFilesValue);
+                        if (!legacyResponse.success) {
+                            throw new Error((legacyResponse.data && legacyResponse.data.message) || 'Upload failed.');
+                        }
+
+                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Upload completed with fallback endpoint.');
+                        await fetchImages(selectedProduct.id);
+                        return;
+                    } catch (fallbackError) {
+                        setStatus(fallbackError.message || error.message || 'Upload failed.');
+                        return;
+                    }
+                }
+
                 setStatus(error.message || 'Upload failed.');
             }
         }
