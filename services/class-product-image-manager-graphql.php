@@ -114,12 +114,24 @@ class Product_Image_Manager_GraphQL
             'args' => array(
                 'categoryId' => array('type' => 'Int'),
                 'search' => array('type' => 'String'),
+                'limit' => array('type' => 'Int'),
+                'offset' => array('type' => 'Int'),
             ),
             'resolve' => function ($root, $args) {
                 $this->authorize_graphql();
 
                 $category_id = isset($args['categoryId']) ? absint($args['categoryId']) : 0;
                 $search = isset($args['search']) ? sanitize_text_field($args['search']) : '';
+                $limit = isset($args['limit']) ? absint($args['limit']) : 25;
+                $offset = isset($args['offset']) ? absint($args['offset']) : 0;
+
+                if ($limit < 1) {
+                    $limit = 25;
+                }
+
+                if ($limit > 100) {
+                    $limit = 100;
+                }
 
                 if (!$category_id) {
                     throw new GraphQL\Error\UserError(__('Category is required.', 'product-image-manager'));
@@ -128,7 +140,8 @@ class Product_Image_Manager_GraphQL
                 $query = new WP_Query(array(
                     'post_type' => 'product',
                     'post_status' => 'publish',
-                    'posts_per_page' => -1,
+                    'posts_per_page' => $limit,
+                    'offset' => $offset,
                     's' => $search,
                     'tax_query' => array(
                         array(

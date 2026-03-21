@@ -5,9 +5,11 @@
         return;
     }
 
+    var PAGE_SIZE = 25;
     var element = window.wp.element;
     var createElement = element.createElement;
     var useEffect = element.useEffect;
+    var useRef = element.useRef;
     var useState = element.useState;
     var mountNode = document.getElementById('pim-app-root');
 
@@ -61,60 +63,51 @@
         return data.data || {};
     }
 
-    async function uploadFilesLegacy(productId, files) {
-        var formData = new FormData();
-        formData.append('action', 'pim_upload_product_images');
-        formData.append('nonce', pimConfig.nonce);
-        formData.append('productId', String(productId));
-
-        Array.prototype.forEach.call(files, function (file) {
+    function uploadSingleFileLegacy(productId, file, onProgress) {
+        return new Promise(function (resolve, reject) {
+            var formData = new FormData();
+            formData.append('action', 'pim_upload_product_images');
+            formData.append('nonce', pimConfig.nonce);
+            formData.append('productId', String(productId));
             formData.append('files[]', file);
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', pimConfig.ajaxUrl, true);
+            xhr.withCredentials = true;
+
+            xhr.upload.addEventListener('progress', function (event) {
+                if (!event.lengthComputable) {
+                    return;
+                }
+
+                var percent = Math.round((event.loaded / event.total) * 100);
+                onProgress(percent);
+            });
+
+            xhr.addEventListener('load', function () {
+                var payload = null;
+
+                try {
+                    payload = JSON.parse(xhr.responseText || '{}');
+                } catch (error) {
+                    reject(new Error('Upload response parse failed.'));
+                    return;
+                }
+
+                if (!payload || !payload.success) {
+                    reject(new Error((payload && payload.data && payload.data.message) || 'Upload failed.'));
+                    return;
+                }
+
+                resolve(payload);
+            });
+
+            xhr.addEventListener('error', function () {
+                reject(new Error('Upload network error.'));
+            });
+
+            xhr.send(formData);
         });
-
-        var response = await fetch(pimConfig.ajaxUrl, {
-            method: 'POST',
-            credentials: 'same-origin',
-            body: formData
-        });
-
-        return response.json();
-    }
-
-    async function uploadFilesGraphQL(productId, files) {
-        var operations = {
-            query: 'mutation PIMUpload($productId: Int!, $files: [Upload]) { pimUploadProductImages(input: { productId: $productId, files: $files }) { success message results { success attachmentId url message } } }',
-            variables: {
-                productId: productId,
-                files: []
-            }
-        };
-
-        var map = {};
-        var formData = new FormData();
-
-        Array.prototype.forEach.call(files, function (file, index) {
-            operations.variables.files.push(null);
-            map[String(index)] = ['variables.files.' + index];
-        });
-
-        formData.append('operations', JSON.stringify(operations));
-        formData.append('map', JSON.stringify(map));
-
-        Array.prototype.forEach.call(files, function (file, index) {
-            formData.append(String(index), file, file.name);
-        });
-
-        var response = await fetch(pimConfig.graphqlUrl, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'X-WP-Nonce': pimConfig.restNonce || '',
-                'X-PIM-Nonce': pimConfig.nonce || ''
-            },
-            body: formData
-        });
-
-        return response.json();
     }
 
     function PIMApp() {
@@ -150,9 +143,28 @@
         var selectedProduct = _useState8[0];
         var setSelectedProduct = _useState8[1];
 
-        var _useState9 = useState(null);
-        var uploadFilesValue = _useState9[0];
-        var setUploadFilesValue = _useState9[1];
+        var _useState9 = useState(false);
+        var isLoadingProducts = _useState9[0];
+        var setIsLoadingProducts = _useState9[1];
+
+        var _useState10 = useState(0);
+        var productsOffset = _useState10[0];
+        var setProductsOffset = _useState10[1];
+
+        var _useState11 = useState(false);
+        var hasMoreProducts = _useState11[0];
+        var setHasMoreProducts = _useState11[1];
+
+        var _useState12 = useState([]);
+        var uploadQueue = _useState12[0];
+        var setUploadQueue = _useState12[1];
+
+        var _useState13 = useState(false);
+        var isUploading = _useState13[0];
+        var setIsUploading = _useState13[1];
+
+        var activeProductsRequestRef = useRef(0);
+        var fileInputRef = useRef(null);
 
         useEffect(function () {
             async function loadCategories() {
@@ -169,10 +181,9 @@
                 }
 
                 try {
-                    var data = await requestGraphQL(
-                        'query PIMCategories { pimSelectedCategories { id name } }'
-                    );
+                    var data = await requestGraphQL('query PIMCategories { pimSelectedCategories { id name } }');
                     var loadedCategories = data.pimSelectedCategories || [];
+
                     if (!loadedCategories.length && pimConfig.bootstrapCategories && pimConfig.bootstrapCategories.length) {
                         setCategories(pimConfig.bootstrapCategories);
                     } else {
@@ -196,40 +207,98 @@
                 return;
             }
 
-            async function loadProducts() {
-                try {
-                    if (pimConfig.hasWpGraphql) {
-                        var data = await requestGraphQL(
-                            'query PIMProducts($categoryId: Int!, $search: String) { pimProducts(categoryId: $categoryId, search: $search) { id name hasImages } }',
-                            { categoryId: selectedCategory.id, search: search }
-                        );
-                        setProducts(data.pimProducts || []);
+            setProducts([]);
+            setProductsOffset(0);
+            setHasMoreProducts(true);
+            setSelectedProduct(null);
+            setImages([]);
+
+            loadProductsPage(true, 0);
+        }, [selectedCategory, search, level]);
+
+        async function loadProductsPage(reset, explicitOffset) {
+            if (!selectedCategory || !selectedCategory.id) {
+                return;
+            }
+
+            var requestId = activeProductsRequestRef.current + 1;
+            activeProductsRequestRef.current = requestId;
+
+            var offset = typeof explicitOffset === 'number' ? explicitOffset : (reset ? 0 : productsOffset);
+            setIsLoadingProducts(true);
+
+            try {
+                var items = [];
+
+                if (pimConfig.hasWpGraphql) {
+                    var data = await requestGraphQL(
+                        'query PIMProducts($categoryId: Int!, $search: String, $limit: Int, $offset: Int) { pimProducts(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) { id name hasImages } }',
+                        {
+                            categoryId: selectedCategory.id,
+                            search: search,
+                            limit: PAGE_SIZE,
+                            offset: offset
+                        }
+                    );
+
+                    if (activeProductsRequestRef.current !== requestId) {
                         return;
                     }
 
+                    items = data.pimProducts || [];
+                } else {
                     var legacyData = await requestLegacy('pim_load_products', {
                         categoryId: selectedCategory.id,
-                        search: search || ''
+                        search: search || '',
+                        limit: PAGE_SIZE,
+                        offset: offset
                     });
 
-                    setProducts(legacyData.products || []);
-                } catch (error) {
-                    try {
-                        var fallbackData = await requestLegacy('pim_load_products', {
-                            categoryId: selectedCategory.id,
-                            search: search || ''
-                        });
-
-                        setProducts(fallbackData.products || []);
-                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
-                    } catch (fallbackError) {
-                        setStatus(fallbackError.message || error.message);
+                    if (activeProductsRequestRef.current !== requestId) {
+                        return;
                     }
+
+                    items = legacyData.products || [];
+                }
+
+                setProducts(function (prev) {
+                    return reset ? items : prev.concat(items);
+                });
+                setProductsOffset(offset + items.length);
+                setHasMoreProducts(items.length === PAGE_SIZE);
+                setIsLoadingProducts(false);
+            } catch (error) {
+                try {
+                    var fallbackData = await requestLegacy('pim_load_products', {
+                        categoryId: selectedCategory.id,
+                        search: search || '',
+                        limit: PAGE_SIZE,
+                        offset: offset
+                    });
+
+                    if (activeProductsRequestRef.current !== requestId) {
+                        return;
+                    }
+
+                    var fallbackItems = fallbackData.products || [];
+                    setProducts(function (prev) {
+                        return reset ? fallbackItems : prev.concat(fallbackItems);
+                    });
+                    setProductsOffset(offset + fallbackItems.length);
+                    setHasMoreProducts(fallbackItems.length === PAGE_SIZE);
+                    setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
+                    setIsLoadingProducts(false);
+                } catch (fallbackError) {
+                    if (activeProductsRequestRef.current !== requestId) {
+                        return;
+                    }
+
+                    setStatus(fallbackError.message || error.message);
+                    setIsLoadingProducts(false);
+                    setHasMoreProducts(false);
                 }
             }
-
-            loadProducts();
-        }, [selectedCategory, search, level]);
+        }
 
         async function fetchImages(activeProductId) {
             try {
@@ -325,52 +394,190 @@
                 return;
             }
 
-            if (!uploadFilesValue || !uploadFilesValue.length) {
-                setStatus('Select at least one file to upload.');
+            if (!uploadQueue.length || isUploading) {
                 return;
             }
 
+            setIsUploading(true);
+
+            var queueSnapshot = uploadQueue.map(function (item) {
+                return item;
+            });
+
             try {
-                var response;
+                var failedCount = 0;
 
-                if (pimConfig.hasGraphqlUpload) {
-                    response = await uploadFilesGraphQL(selectedProduct.id, uploadFilesValue);
+                for (var i = 0; i < queueSnapshot.length; i++) {
+                    var entry = queueSnapshot[i];
 
-                    if (response.errors && response.errors.length) {
-                        throw new Error(response.errors[0].message || 'GraphQL upload failed.');
-                    }
+                    setUploadQueue(function (prev) {
+                        return prev.map(function (item) {
+                            if (item.id !== entry.id) {
+                                return item;
+                            }
 
-                    if (!response.data || !response.data.pimUploadProductImages || !response.data.pimUploadProductImages.success) {
-                        throw new Error((response.data && response.data.pimUploadProductImages && response.data.pimUploadProductImages.message) || 'Upload failed.');
-                    }
-                } else {
-                    response = await uploadFilesLegacy(selectedProduct.id, uploadFilesValue);
-                    if (!response.success) {
-                        throw new Error((response.data && response.data.message) || 'Upload failed.');
-                    }
-                }
+                            return Object.assign({}, item, {
+                                status: 'uploading',
+                                progress: 0,
+                                errorMessage: ''
+                            });
+                        });
+                    });
 
-                setStatus('Upload complete.');
-                await fetchImages(selectedProduct.id);
-            } catch (error) {
-                if (pimConfig.hasGraphqlUpload) {
                     try {
-                        var legacyResponse = await uploadFilesLegacy(selectedProduct.id, uploadFilesValue);
-                        if (!legacyResponse.success) {
-                            throw new Error((legacyResponse.data && legacyResponse.data.message) || 'Upload failed.');
-                        }
+                        await uploadSingleFileLegacy(selectedProduct.id, entry.file, function (progressValue) {
+                            setUploadQueue(function (prev) {
+                                return prev.map(function (item) {
+                                    if (item.id !== entry.id) {
+                                        return item;
+                                    }
 
-                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Upload completed with fallback endpoint.');
-                        await fetchImages(selectedProduct.id);
-                        return;
-                    } catch (fallbackError) {
-                        setStatus(fallbackError.message || error.message || 'Upload failed.');
-                        return;
+                                    return Object.assign({}, item, {
+                                        progress: progressValue
+                                    });
+                                });
+                            });
+                        });
+
+                        setUploadQueue(function (prev) {
+                            return prev.map(function (item) {
+                                if (item.id !== entry.id) {
+                                    return item;
+                                }
+
+                                return Object.assign({}, item, {
+                                    status: 'done',
+                                    progress: 100
+                                });
+                            });
+                        });
+                    } catch (fileError) {
+                        failedCount += 1;
+
+                        setUploadQueue(function (prev) {
+                            return prev.map(function (item) {
+                                if (item.id !== entry.id) {
+                                    return item;
+                                }
+
+                                return Object.assign({}, item, {
+                                    status: 'failed',
+                                    errorMessage: fileError.message || 'Upload failed.'
+                                });
+                            });
+                        });
                     }
                 }
 
-                setStatus(error.message || 'Upload failed.');
+                setStatus(failedCount ? 'Upload completed with some failures.' : 'Upload complete.');
+                await fetchImages(selectedProduct.id);
+
+                setUploadQueue(function (prev) {
+                    prev.forEach(function (item) {
+                        if (item.status === 'done' && item.previewUrl) {
+                            URL.revokeObjectURL(item.previewUrl);
+                        }
+                    });
+
+                    return prev.filter(function (item) {
+                        return item.status !== 'done';
+                    });
+                });
+            } finally {
+                setIsUploading(false);
             }
+        }
+
+        function onFilesSelected(event) {
+            if (isUploading) {
+                return;
+            }
+
+            var files = Array.prototype.slice.call((event.target && event.target.files) || []);
+            if (!files.length) {
+                return;
+            }
+
+            var mapped = files.map(function (file, index) {
+                return {
+                    id: Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2),
+                    file: file,
+                    progress: 0,
+                    status: 'queued',
+                    errorMessage: '',
+                    previewUrl: URL.createObjectURL(file)
+                };
+            });
+
+            setUploadQueue(function (prev) {
+                return prev.concat(mapped);
+            });
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+
+        function removeQueuedItem(id) {
+            if (isUploading) {
+                return;
+            }
+
+            setUploadQueue(function (prev) {
+                var target = prev.find(function (item) {
+                    return item.id === id;
+                });
+
+                if (target && target.previewUrl) {
+                    URL.revokeObjectURL(target.previewUrl);
+                }
+
+                return prev.filter(function (item) {
+                    return item.id !== id;
+                });
+            });
+        }
+
+        function moveQueuedItem(id, direction) {
+            if (isUploading) {
+                return;
+            }
+
+            setUploadQueue(function (prev) {
+                var next = prev.slice();
+                var index = next.findIndex(function (item) {
+                    return item.id === id;
+                });
+
+                if (index === -1) {
+                    return prev;
+                }
+
+                var targetIndex = direction === 'up' ? index - 1 : index + 1;
+                if (targetIndex < 0 || targetIndex >= next.length) {
+                    return prev;
+                }
+
+                var current = next[index];
+                next[index] = next[targetIndex];
+                next[targetIndex] = current;
+                return next;
+            });
+        }
+
+        function clearQueue() {
+            if (isUploading) {
+                return;
+            }
+
+            setUploadQueue(function (prev) {
+                prev.forEach(function (item) {
+                    if (item.previewUrl) {
+                        URL.revokeObjectURL(item.previewUrl);
+                    }
+                });
+                return [];
+            });
         }
 
         function goToCategories() {
@@ -378,8 +585,11 @@
             setSelectedCategory(null);
             setSelectedProduct(null);
             setProducts([]);
+            setProductsOffset(0);
+            setHasMoreProducts(false);
             setImages([]);
             setSearch('');
+            setStatus('');
         }
 
         function goToProducts() {
@@ -402,6 +612,10 @@
             setSearch('');
             setLevel('products');
             setStatus('');
+            setProducts([]);
+            setProductsOffset(0);
+            setHasMoreProducts(true);
+            setIsLoadingProducts(true);
         }
 
         function toggleCategory(category) {
@@ -409,13 +623,7 @@
             var isSameCategory = selectedCategory && Number(selectedCategory.id) === categoryId;
 
             if (isSameCategory) {
-                setSelectedCategory(null);
-                setSelectedProduct(null);
-                setProducts([]);
-                setImages([]);
-                setSearch('');
-                setLevel('categories');
-                setStatus('');
+                goToCategories();
                 return;
             }
 
@@ -500,6 +708,7 @@
                         categories.map(function (category) {
                             var categoryId = Number(category.id);
                             var isActiveCategory = selectedCategoryId === categoryId;
+
                             return createElement(
                                 'div',
                                 { key: categoryId, className: 'pim-tree-node' },
@@ -514,7 +723,7 @@
                                     },
                                     createElement('span', { className: 'pim-tree-icon' }, '\ud83d\udcc1'),
                                     createElement('span', { className: 'pim-tree-label' }, category.name),
-                                    createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? '▼ Open' : '▶ Closed')
+                                    createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? '\u25bc Open' : '\u25b6 Closed')
                                 ),
                                 isActiveCategory ? createElement(
                                     'div',
@@ -528,25 +737,42 @@
                                         },
                                         placeholder: 'Search products in this category'
                                     }),
-                                    !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
-                                    products.map(function (product) {
-                                        var productId = Number(product.id);
-                                        var isActiveProduct = selectedProductId === productId;
+                                    isLoadingProducts ? createElement('p', { className: 'pim-status' }, 'Loading products...') : null,
+                                    !isLoadingProducts && !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
+                                    createElement(
+                                        'div',
+                                        { className: 'pim-products-grid' },
+                                        !isLoadingProducts ? products.map(function (product) {
+                                            var productId = Number(product.id);
+                                            var isActiveProduct = selectedProductId === productId;
 
-                                        return createElement(
-                                            'button',
-                                            {
-                                                key: productId,
-                                                className: 'pim-tree-item pim-tree-item-product' + (isActiveProduct ? ' is-active' : ''),
-                                                type: 'button',
-                                                onClick: function () {
-                                                    openProduct(product);
-                                                }
-                                            },
-                                            createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
-                                            createElement('span', { className: 'pim-tree-label' }, product.name)
-                                        );
-                                    })
+                                            return createElement(
+                                                'button',
+                                                {
+                                                    key: productId,
+                                                    className: 'pim-tree-item pim-tree-item-product' + (isActiveProduct ? ' is-active' : ''),
+                                                    type: 'button',
+                                                    onClick: function () {
+                                                        openProduct(product);
+                                                    }
+                                                },
+                                                createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
+                                                createElement('span', { className: 'pim-tree-label' }, product.name)
+                                            );
+                                        }) : null
+                                    ),
+                                    hasMoreProducts ? createElement(
+                                        'button',
+                                        {
+                                            type: 'button',
+                                            className: 'button pim-load-more-btn',
+                                            disabled: isLoadingProducts,
+                                            onClick: function () {
+                                                loadProductsPage(false, productsOffset);
+                                            }
+                                        },
+                                        isLoadingProducts ? 'Loading...' : 'Load more'
+                                    ) : null
                                 ) : null
                             );
                         })
@@ -560,15 +786,85 @@
                     selectedProduct ? createElement(
                         'form',
                         { className: 'pim-upload', onSubmit: onUpload },
-                        createElement('input', {
-                            type: 'file',
-                            multiple: true,
-                            accept: 'image/jpeg,image/png,image/webp',
-                            onChange: function (event) {
-                                setUploadFilesValue(event.target.files);
-                            }
-                        }),
-                        createElement('button', { className: 'button button-primary', type: 'submit' }, 'Upload')
+                        createElement(
+                            'div',
+                            { className: 'pim-uploader-box' },
+                            createElement('input', {
+                                ref: fileInputRef,
+                                type: 'file',
+                                multiple: true,
+                                accept: 'image/jpeg,image/png,image/webp',
+                                disabled: isUploading,
+                                onChange: onFilesSelected
+                            }),
+                            createElement(
+                                'div',
+                                { className: 'pim-upload-actions-row' },
+                                createElement('button', {
+                                    className: 'button button-primary',
+                                    type: 'submit',
+                                    disabled: isUploading || !uploadQueue.length
+                                }, isUploading ? 'Uploading...' : 'Upload Selected'),
+                                createElement('button', {
+                                    className: 'button',
+                                    type: 'button',
+                                    onClick: clearQueue,
+                                    disabled: isUploading || !uploadQueue.length
+                                }, 'Clear')
+                            )
+                        ),
+                        createElement(
+                            'div',
+                            { className: 'pim-upload-queue' },
+                            !uploadQueue.length ? createElement('p', { className: 'pim-status' }, 'No files selected.') : null,
+                            uploadQueue.map(function (entry, index) {
+                                var canMoveUp = index > 0;
+                                var canMoveDown = index < uploadQueue.length - 1;
+
+                                return createElement(
+                                    'article',
+                                    { key: entry.id, className: 'pim-upload-item pim-upload-item-' + entry.status },
+                                    createElement('img', { className: 'pim-upload-preview', src: entry.previewUrl, alt: entry.file.name }),
+                                    createElement(
+                                        'div',
+                                        { className: 'pim-upload-meta' },
+                                        createElement('div', { className: 'pim-upload-name', title: entry.file.name }, entry.file.name),
+                                        createElement('div', { className: 'pim-upload-size' }, (entry.file.size / 1024).toFixed(0) + ' KB'),
+                                        createElement(
+                                            'div',
+                                            { className: 'pim-upload-progress-wrap' },
+                                            createElement('div', {
+                                                className: 'pim-upload-progress-bar',
+                                                style: { width: String(entry.progress) + '%' }
+                                            }),
+                                            createElement('span', { className: 'pim-upload-progress-text' }, entry.status === 'failed' ? (entry.errorMessage || 'Failed') : (String(entry.progress) + '%'))
+                                        )
+                                    ),
+                                    createElement(
+                                        'div',
+                                        { className: 'pim-upload-controls' },
+                                        createElement('button', {
+                                            type: 'button',
+                                            className: 'button button-small',
+                                            disabled: isUploading || !canMoveUp,
+                                            onClick: function () { moveQueuedItem(entry.id, 'up'); }
+                                        }, '\u2191'),
+                                        createElement('button', {
+                                            type: 'button',
+                                            className: 'button button-small',
+                                            disabled: isUploading || !canMoveDown,
+                                            onClick: function () { moveQueuedItem(entry.id, 'down'); }
+                                        }, '\u2193'),
+                                        createElement('button', {
+                                            type: 'button',
+                                            className: 'button button-small',
+                                            disabled: isUploading,
+                                            onClick: function () { removeQueuedItem(entry.id); }
+                                        }, 'Remove')
+                                    )
+                                );
+                            })
+                        )
                     ) : null,
                     createElement('div', { className: 'pim-status' }, status),
                     createElement(

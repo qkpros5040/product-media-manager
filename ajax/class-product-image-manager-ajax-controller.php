@@ -35,6 +35,16 @@ class Product_Image_Manager_Ajax_Controller
 
         $category_id = isset($_POST['categoryId']) ? absint($_POST['categoryId']) : 0;
         $search = isset($_POST['search']) ? sanitize_text_field(wp_unslash($_POST['search'])) : '';
+        $limit = isset($_POST['limit']) ? absint($_POST['limit']) : 25;
+        $offset = isset($_POST['offset']) ? absint($_POST['offset']) : 0;
+
+        if ($limit < 1) {
+            $limit = 25;
+        }
+
+        if ($limit > 100) {
+            $limit = 100;
+        }
 
         if (!$category_id) {
             wp_send_json_error(array('message' => __('Category is required.', 'product-image-manager')), 400);
@@ -43,7 +53,8 @@ class Product_Image_Manager_Ajax_Controller
         $args = array(
             'post_type' => 'product',
             'post_status' => 'publish',
-            'posts_per_page' => -1,
+            'posts_per_page' => $limit,
+            'offset' => $offset,
             's' => $search,
             'tax_query' => array(
                 array(

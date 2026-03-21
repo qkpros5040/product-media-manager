@@ -236,14 +236,26 @@
 }
 
 .pim-tree-item-product {
-    margin-left: 18px;
-    width: calc(100% - 18px);
+    margin-left: 0;
+    width: 100%;
     background: #ffffff;
 }
 
 .pim-tree-children {
     display: grid;
     gap: 8px;
+}
+
+.pim-products-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-left: 18px;
+}
+
+.pim-load-more-btn {
+    margin-left: 18px;
+    width: fit-content;
 }
 
 .pim-tree-icon {
@@ -339,6 +351,100 @@
     margin-bottom: 8px;
 }
 
+.pim-uploader-box {
+    border: 1px solid #dbe2ea;
+    border-radius: 10px;
+    padding: 10px;
+    background: #f8fafc;
+    display: grid;
+    gap: 8px;
+}
+
+.pim-upload-actions-row {
+    display: flex;
+    gap: 8px;
+}
+
+.pim-upload-queue {
+    display: grid;
+    gap: 8px;
+}
+
+.pim-upload-item {
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fff;
+}
+
+.pim-upload-item-uploading {
+    border-color: #93c5fd;
+    background: #f8fbff;
+}
+
+.pim-upload-item-failed {
+    border-color: #fecaca;
+    background: #fff7f7;
+}
+
+.pim-upload-preview {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.pim-upload-meta {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.pim-upload-name {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pim-upload-size {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.pim-upload-progress-wrap {
+    position: relative;
+    height: 8px;
+    border-radius: 6px;
+    background: #e5e7eb;
+    overflow: hidden;
+}
+
+.pim-upload-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    width: 0;
+    transition: width 0.15s linear;
+}
+
+.pim-upload-progress-text {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #475569;
+}
+
+.pim-upload-controls {
+    display: flex;
+    gap: 6px;
+}
+
 .pim-status {
     min-height: 20px;
     color: #555;
@@ -416,6 +522,10 @@
 @media (max-width: 960px) {
     .pim-explorer {
         grid-template-columns: 1fr;
+    }
+
+    .pim-products-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .pim-header {
