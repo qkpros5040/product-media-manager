@@ -169,8 +169,20 @@
         var isUploading = _useState13[0];
         var setIsUploading = _useState13[1];
 
+        var _useState14 = useState('');
+        var debouncedSearch = _useState14[0];
+        var setDebouncedSearch = _useState14[1];
+
+        var _useState15 = useState(0);
+        var productWindowStart = _useState15[0];
+        var setProductWindowStart = _useState15[1];
+
         var activeProductsRequestRef = useRef(0);
         var fileInputRef = useRef(null);
+        var productsViewportRef = useRef(null);
+        var productsCacheRef = useRef({});
+        var imagesCacheRef = useRef({});
+        var productsPrefetchingRef = useRef({});
 
         useEffect(function () {
             async function loadCategories() {
@@ -209,7 +221,17 @@
         }, []);
 
         useEffect(function () {
-            if (!selectedCategory || !selectedCategory.id || level !== 'products') {
+            var debounceHandle = window.setTimeout(function () {
+                setDebouncedSearch(search);
+            }, 180);
+
+            return function () {
+                window.clearTimeout(debounceHandle);
+            };
+        }, [search]);
+
+        useEffect(function () {
+            if (!selectedCategory || !selectedCategory.id) {
                 return;
             }
 
@@ -218,9 +240,92 @@
             setHasMoreProducts(true);
             setSelectedProduct(null);
             setImages([]);
+            setProductWindowStart(0);
 
             loadProductsPage(true, 0);
-        }, [selectedCategory, search, level]);
+        }, [selectedCategory]);
+
+        useEffect(function () {
+            if (!selectedCategory || !selectedCategory.id) {
+                return;
+            }
+
+            setProducts([]);
+            setProductsOffset(0);
+            setHasMoreProducts(true);
+            setProductWindowStart(0);
+            loadProductsPage(true, 0);
+        }, [debouncedSearch]);
+
+        function getProductsCacheKey(categoryId, searchValue, offsetValue) {
+            return [String(categoryId), String(searchValue || ''), String(offsetValue || 0)].join('::');
+        }
+
+        function invalidateCurrentCategoryProductsCache() {
+            if (!selectedCategory || !selectedCategory.id) {
+                return;
+            }
+
+            Object.keys(productsCacheRef.current).forEach(function (key) {
+                if (key.indexOf(String(selectedCategory.id) + '::') === 0) {
+                    delete productsCacheRef.current[key];
+                }
+            });
+        }
+
+        function getProductsColumnCount() {
+            return window.matchMedia('(max-width: 900px)').matches ? 2 : 3;
+        }
+
+        function prefetchNextProductsPage(nextOffset) {
+            if (!selectedCategory || !selectedCategory.id) {
+                return;
+            }
+
+            var cacheKey = getProductsCacheKey(selectedCategory.id, debouncedSearch, nextOffset);
+            if (productsCacheRef.current[cacheKey] || productsPrefetchingRef.current[cacheKey]) {
+                return;
+            }
+
+            productsPrefetchingRef.current[cacheKey] = true;
+
+            (async function () {
+                try {
+                    if (pimConfig.hasWpGraphql) {
+                        var data = await requestGraphQL(
+                            'query PIMProducts($categoryId: Int!, $search: String, $limit: Int, $offset: Int) { pimProducts(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) { id name hasImages permalink } }',
+                            {
+                                categoryId: selectedCategory.id,
+                                search: debouncedSearch,
+                                limit: PAGE_SIZE,
+                                offset: nextOffset
+                            }
+                        );
+
+                        productsCacheRef.current[cacheKey] = data.pimProducts || [];
+                    } else {
+                        var legacyData = await requestLegacy('pim_load_products', {
+                            categoryId: selectedCategory.id,
+                            search: debouncedSearch || '',
+                            limit: PAGE_SIZE,
+                            offset: nextOffset
+                        });
+
+                        productsCacheRef.current[cacheKey] = legacyData.products || [];
+                    }
+                } catch (error) {
+                    // Best effort prefetch: fail silently.
+                } finally {
+                    delete productsPrefetchingRef.current[cacheKey];
+                }
+            })();
+        }
+
+        function updateImagesForProduct(productId, nextImages) {
+            var cacheKey = String(productId);
+            imagesCacheRef.current[cacheKey] = nextImages;
+            setImages(nextImages);
+        }
 
         async function loadProductsPage(reset, explicitOffset) {
             if (!selectedCategory || !selectedCategory.id) {
@@ -231,6 +336,22 @@
             activeProductsRequestRef.current = requestId;
 
             var offset = typeof explicitOffset === 'number' ? explicitOffset : (reset ? 0 : productsOffset);
+            var cacheKey = getProductsCacheKey(selectedCategory.id, debouncedSearch, offset);
+            var cachedItems = productsCacheRef.current[cacheKey];
+
+            if (cachedItems) {
+                setProducts(function (prev) {
+                    return reset ? cachedItems : prev.concat(cachedItems);
+                });
+                setProductsOffset(offset + cachedItems.length);
+                setHasMoreProducts(cachedItems.length === PAGE_SIZE);
+                if (cachedItems.length === PAGE_SIZE) {
+                    prefetchNextProductsPage(offset + cachedItems.length);
+                }
+                setIsLoadingProducts(false);
+                return;
+            }
+
             setIsLoadingProducts(true);
 
             try {
@@ -241,7 +362,7 @@
                         'query PIMProducts($categoryId: Int!, $search: String, $limit: Int, $offset: Int) { pimProducts(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) { id name hasImages permalink } }',
                         {
                             categoryId: selectedCategory.id,
-                            search: search,
+                            search: debouncedSearch,
                             limit: PAGE_SIZE,
                             offset: offset
                         }
@@ -255,7 +376,7 @@
                 } else {
                     var legacyData = await requestLegacy('pim_load_products', {
                         categoryId: selectedCategory.id,
-                        search: search || '',
+                        search: debouncedSearch || '',
                         limit: PAGE_SIZE,
                         offset: offset
                     });
@@ -267,17 +388,22 @@
                     items = legacyData.products || [];
                 }
 
+                productsCacheRef.current[cacheKey] = items;
+
                 setProducts(function (prev) {
                     return reset ? items : prev.concat(items);
                 });
                 setProductsOffset(offset + items.length);
                 setHasMoreProducts(items.length === PAGE_SIZE);
+                if (items.length === PAGE_SIZE) {
+                    prefetchNextProductsPage(offset + items.length);
+                }
                 setIsLoadingProducts(false);
             } catch (error) {
                 try {
                     var fallbackData = await requestLegacy('pim_load_products', {
                         categoryId: selectedCategory.id,
-                        search: search || '',
+                        search: debouncedSearch || '',
                         limit: PAGE_SIZE,
                         offset: offset
                     });
@@ -287,11 +413,15 @@
                     }
 
                     var fallbackItems = fallbackData.products || [];
+                    productsCacheRef.current[cacheKey] = fallbackItems;
                     setProducts(function (prev) {
                         return reset ? fallbackItems : prev.concat(fallbackItems);
                     });
                     setProductsOffset(offset + fallbackItems.length);
                     setHasMoreProducts(fallbackItems.length === PAGE_SIZE);
+                    if (fallbackItems.length === PAGE_SIZE) {
+                        prefetchNextProductsPage(offset + fallbackItems.length);
+                    }
                     setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
                     setIsLoadingProducts(false);
                 } catch (fallbackError) {
@@ -307,25 +437,37 @@
         }
 
         async function fetchImages(activeProductId) {
+            var cacheKey = String(activeProductId);
+            var cachedImages = imagesCacheRef.current[cacheKey];
+
+            if (cachedImages) {
+                setImages(cachedImages);
+                return;
+            }
+
             try {
                 if (pimConfig.hasWpGraphql) {
                     var data = await requestGraphQL(
                         'query PIMProductImages($productId: Int!) { pimProductImages(productId: $productId) { featuredId images { id url fileName isFeatured } } }',
                         { productId: activeProductId }
                     );
-                    setImages((data.pimProductImages && data.pimProductImages.images) || []);
+                    var graphqlImages = (data.pimProductImages && data.pimProductImages.images) || [];
+                    imagesCacheRef.current[cacheKey] = graphqlImages;
+                    setImages(graphqlImages);
                     return;
                 }
 
                 var legacyData = await requestLegacy('pim_load_product_images', {
                     productId: activeProductId
                 });
+                imagesCacheRef.current[cacheKey] = legacyData.images || [];
                 setImages(legacyData.images || []);
             } catch (error) {
                 try {
                     var fallbackData = await requestLegacy('pim_load_product_images', {
                         productId: activeProductId
                     });
+                    imagesCacheRef.current[cacheKey] = fallbackData.images || [];
                     setImages(fallbackData.images || []);
                     setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using fallback data.');
                 } catch (fallbackError) {
@@ -335,7 +477,15 @@
         }
 
         async function onDetach(attachmentId) {
+            var previousImages = images.slice();
+            var optimisticImages = previousImages.filter(function (image) {
+                return Number(image.id) !== Number(attachmentId);
+            });
+            updateImagesForProduct(selectedProduct.id, optimisticImages);
+
             try {
+                delete imagesCacheRef.current[String(selectedProduct.id)];
+                invalidateCurrentCategoryProductsCache();
                 if (pimConfig.hasWpGraphql) {
                     await requestGraphQL(
                         'mutation PIMDetach($productId: Int!, $attachmentId: Int!) { pimDetachProductImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
@@ -358,13 +508,37 @@
                     await fetchImages(selectedProduct.id);
                     setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Action completed with fallback.');
                 } catch (fallbackError) {
+                    updateImagesForProduct(selectedProduct.id, previousImages);
                     setStatus(fallbackError.message || error.message);
                 }
             }
         }
 
         async function onSetFeatured(attachmentId) {
+            var previousImages = images.slice();
+            var optimisticImages = previousImages.map(function (image) {
+                return Object.assign({}, image, {
+                    isFeatured: Number(image.id) === Number(attachmentId)
+                });
+            });
+
+            optimisticImages.sort(function (a, b) {
+                if (a.isFeatured && !b.isFeatured) {
+                    return -1;
+                }
+
+                if (!a.isFeatured && b.isFeatured) {
+                    return 1;
+                }
+
+                return 0;
+            });
+
+            updateImagesForProduct(selectedProduct.id, optimisticImages);
+
             try {
+                delete imagesCacheRef.current[String(selectedProduct.id)];
+                invalidateCurrentCategoryProductsCache();
                 if (pimConfig.hasWpGraphql) {
                     await requestGraphQL(
                         'mutation PIMSetFeatured($productId: Int!, $attachmentId: Int!) { pimSetFeaturedImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
@@ -387,6 +561,7 @@
                     await fetchImages(selectedProduct.id);
                     setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Action completed with fallback.');
                 } catch (fallbackError) {
+                    updateImagesForProduct(selectedProduct.id, previousImages);
                     setStatus(fallbackError.message || error.message);
                 }
             }
@@ -476,6 +651,8 @@
                 }
 
                 setStatus(failedCount ? 'Upload completed with some failures.' : 'Upload complete.');
+                delete imagesCacheRef.current[String(selectedProduct.id)];
+                invalidateCurrentCategoryProductsCache();
                 await fetchImages(selectedProduct.id);
 
                 setUploadQueue(function (prev) {
@@ -596,6 +773,7 @@
             setImages([]);
             setSearch('');
             setStatus('');
+            setProductWindowStart(0);
         }
 
         function goToProducts() {
@@ -606,6 +784,7 @@
             setLevel('products');
             setSelectedProduct(null);
             setImages([]);
+            setProductWindowStart(0);
         }
 
         function openCategory(category) {
@@ -622,6 +801,25 @@
             setProductsOffset(0);
             setHasMoreProducts(true);
             setIsLoadingProducts(true);
+            setProductWindowStart(0);
+        }
+
+        function onProductsViewportScroll(event) {
+            var viewport = event.target;
+            var columns = getProductsColumnCount();
+            var rowHeight = 122;
+            var overscanRows = 3;
+            var visibleRows = 8;
+            var currentTopRow = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscanRows);
+            var nextStart = currentTopRow * columns;
+
+            if (nextStart !== productWindowStart) {
+                setProductWindowStart(nextStart);
+            }
+
+            if (viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 320 && hasMoreProducts && !isLoadingProducts) {
+                loadProductsPage(false, productsOffset);
+            }
         }
 
         function toggleCategory(category) {
@@ -690,6 +888,13 @@
 
         var selectedCategoryId = selectedCategory ? Number(selectedCategory.id) : null;
         var selectedProductId = selectedProduct ? Number(selectedProduct.id) : null;
+        var productColumns = getProductsColumnCount();
+        var windowSize = productColumns * 12;
+        var clampedStart = Math.max(0, Math.min(productWindowStart, Math.max(0, products.length - 1)));
+        var visibleProducts = products.slice(clampedStart, clampedStart + windowSize);
+        var topSpacerRows = Math.floor(clampedStart / productColumns);
+        var remainingAfterWindow = Math.max(0, products.length - (clampedStart + visibleProducts.length));
+        var bottomSpacerRows = Math.ceil(remainingAfterWindow / productColumns);
 
         return createElement(
             'div',
@@ -787,8 +992,21 @@
                                     !isLoadingProducts && !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
                                     createElement(
                                         'div',
-                                        { className: 'pim-products-grid' },
-                                        !isLoadingProducts ? products.map(function (product) {
+                                        {
+                                            className: 'pim-products-viewport',
+                                            ref: productsViewportRef,
+                                            onScroll: onProductsViewportScroll
+                                        },
+                                        createElement('div', {
+                                            className: 'pim-products-spacer',
+                                            style: {
+                                                height: String(topSpacerRows * 122) + 'px'
+                                            }
+                                        }),
+                                        createElement(
+                                            'div',
+                                            { className: 'pim-products-grid' },
+                                            !isLoadingProducts ? visibleProducts.map(function (product) {
                                             var productId = Number(product.id);
                                             var isActiveProduct = selectedProductId === productId;
 
@@ -810,7 +1028,14 @@
                                                     createElement('span', { className: 'pim-tree-meta' }, product.hasImages ? 'Has images' : 'No images yet')
                                                 )
                                             );
-                                        }) : null
+                                            }) : null
+                                        ),
+                                        createElement('div', {
+                                            className: 'pim-products-spacer',
+                                            style: {
+                                                height: String(bottomSpacerRows * 122) + 'px'
+                                            }
+                                        })
                                     ),
                                     hasMoreProducts ? createElement(
                                         'button',

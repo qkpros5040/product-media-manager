@@ -336,14 +336,43 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
+    margin-left: 0;
+}
+
+.pim-products-viewport {
     margin-left: 20px;
+    max-height: 440px;
+    overflow: auto;
+    padding-right: 4px;
+}
+
+.pim-products-spacer {
+    width: 100%;
 }
 
 .pim-tree-item-product {
     width: 100%;
-    min-height: 88px;
+    min-height: 96px;
+    gap: 9px;
+    padding: 10px 11px;
     align-items: flex-start;
     background: #fff;
+}
+
+.pim-tree-item-product .pim-tree-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    font-size: 14px;
+}
+
+.pim-tree-item-product .pim-tree-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    display: block;
+    line-height: 1.25;
+    font-size: 12px;
 }
 
 .pim-load-more-btn {
@@ -544,33 +573,47 @@
 
 .pim-image-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 14px;
+    grid-template-columns: 1fr;
+    gap: 12px;
 }
 
 .pim-image-card {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
     overflow: hidden;
     border: 1px solid var(--pim-border);
     border-radius: 18px;
     background: #fff;
     box-shadow: 0 8px 26px rgba(15, 23, 42, 0.06);
+    padding: 12px;
 }
 
 .pim-image-card img {
     display: block;
-    width: 100%;
-    aspect-ratio: 1 / 1;
+    width: 120px;
+    height: 120px;
+    border-radius: 14px;
     object-fit: cover;
 }
 
 .pim-image-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
     gap: 8px;
-    padding: 10px 12px 0;
+    min-width: 0;
     font-size: 12px;
     font-weight: 600;
+}
+
+.pim-image-meta>span:first-child {
+    display: block;
+    min-width: 0;
+    color: var(--pim-text);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .pim-badge {
@@ -586,9 +629,10 @@
 }
 
 .pim-actions {
-    display: flex;
+    display: grid;
     gap: 8px;
-    padding: 12px;
+    align-self: stretch;
+    min-width: 132px;
 }
 
 .pim-app .button.button-small {
@@ -628,6 +672,10 @@
     .pim-products-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .pim-products-viewport {
+        margin-left: 20px;
+    }
 }
 
 @media (max-width: 640px) {
@@ -645,6 +693,9 @@
 
     .pim-products-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pim-products-viewport {
         margin-left: 0;
     }
 
@@ -658,5 +709,21 @@
 
     .pim-upload-controls {
         grid-column: 1 / -1;
+    }
+
+    .pim-image-card {
+        grid-template-columns: 1fr;
+        align-items: start;
+    }
+
+    .pim-image-card img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+    }
+
+    .pim-actions {
+        min-width: 0;
+        grid-template-columns: 1fr 1fr;
     }
 }
