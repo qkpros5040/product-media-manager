@@ -427,22 +427,6 @@
             }
         }
 
-        var explorerTitle = 'Categories';
-        if (level === 'products') {
-            explorerTitle = selectedCategory ? selectedCategory.name : 'Products';
-        }
-        if (level === 'images') {
-            explorerTitle = selectedProduct ? selectedProduct.name : 'Images';
-        }
-
-        var explorerItems = [];
-        if (level === 'categories') {
-            explorerItems = categories;
-        }
-        if (level === 'products') {
-            explorerItems = products;
-        }
-
         var breadcrumb = createElement(
             'div',
             { className: 'pim-breadcrumb' },
@@ -462,6 +446,9 @@
                 selectedProduct.name
             ) : null
         );
+
+        var selectedCategoryId = selectedCategory ? Number(selectedCategory.id) : null;
+        var selectedProductId = selectedProduct ? Number(selectedProduct.id) : null;
 
         return createElement(
             'div',
@@ -486,43 +473,63 @@
                 { className: 'pim-explorer' },
                 createElement(
                     'section',
-                    { className: 'pim-panel pim-panel-explorer' },
-                    createElement('h3', null, explorerTitle),
-                    level === 'products' ? createElement('input', {
-                        className: 'pim-search',
-                        type: 'search',
-                        value: search,
-                        onChange: function (event) {
-                            setSearch(event.target.value);
-                        },
-                        placeholder: 'Search products in this folder'
-                    }) : null,
+                    { className: 'pim-panel pim-panel-tree' },
+                    createElement('h3', null, 'Folder Hierarchy'),
                     createElement(
                         'div',
-                        { className: 'pim-folder-grid' },
-                        level === 'categories' && !categories.length ? createElement('p', { className: 'pim-status' }, (pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.') : null,
-                        level === 'products' && selectedCategory && !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
-                        explorerItems.map(function (item) {
-                            var isCategory = level === 'categories';
-                            var folderStateClass = isCategory ? 'pim-folder-neutral' : (item.hasImages ? 'pim-folder-green' : 'pim-folder-red');
-
+                        { className: 'pim-tree' },
+                        !categories.length ? createElement('p', { className: 'pim-status' }, (pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.') : null,
+                        categories.map(function (category) {
+                            var categoryId = Number(category.id);
+                            var isActiveCategory = selectedCategoryId === categoryId;
                             return createElement(
-                                'button',
-                                {
-                                    key: item.id,
-                                    className: 'pim-folder pim-folder-drive',
-                                    type: 'button',
-                                    onClick: function () {
-                                        if (isCategory) {
-                                            openCategory(item);
-                                        } else {
-                                            openProduct(item);
+                                'div',
+                                { key: categoryId, className: 'pim-tree-node' },
+                                createElement(
+                                    'button',
+                                    {
+                                        className: 'pim-tree-item pim-tree-item-category' + (isActiveCategory ? ' is-active' : ''),
+                                        type: 'button',
+                                        onClick: function () {
+                                            openCategory(category);
                                         }
-                                    }
-                                },
-                                createElement('span', { className: 'pim-folder-icon ' + folderStateClass }),
-                                createElement('span', { className: 'pim-folder-label' }, item.name),
-                                createElement('span', { className: 'pim-folder-open' }, 'Open')
+                                    },
+                                    createElement('span', { className: 'pim-tree-icon' }, '\ud83d\udcc1'),
+                                    createElement('span', { className: 'pim-tree-label' }, category.name),
+                                    createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? 'Open' : '')
+                                ),
+                                isActiveCategory ? createElement(
+                                    'div',
+                                    { className: 'pim-tree-children' },
+                                    createElement('input', {
+                                        className: 'pim-search',
+                                        type: 'search',
+                                        value: search,
+                                        onChange: function (event) {
+                                            setSearch(event.target.value);
+                                        },
+                                        placeholder: 'Search products in this category'
+                                    }),
+                                    !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
+                                    products.map(function (product) {
+                                        var productId = Number(product.id);
+                                        var isActiveProduct = selectedProductId === productId;
+
+                                        return createElement(
+                                            'button',
+                                            {
+                                                key: productId,
+                                                className: 'pim-tree-item pim-tree-item-product' + (isActiveProduct ? ' is-active' : ''),
+                                                type: 'button',
+                                                onClick: function () {
+                                                    openProduct(product);
+                                                }
+                                            },
+                                            createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
+                                            createElement('span', { className: 'pim-tree-label' }, product.name)
+                                        );
+                                    })
+                                ) : null
                             );
                         })
                     )
@@ -530,28 +537,27 @@
                 createElement(
                     'section',
                     { className: 'pim-panel pim-panel-images' },
-                    createElement('h3', null, 'Image Upload'),
-                    level !== 'images' ? createElement('p', { className: 'pim-status' }, 'Open a product folder to upload and manage images.') : null,
-                    createElement(
+                    createElement('h3', null, selectedProduct ? ('Image Upload: ' + selectedProduct.name) : 'Image Upload'),
+                    !selectedProduct ? createElement('p', { className: 'pim-status' }, 'Select a product in the hierarchy to upload and manage images.') : null,
+                    selectedProduct ? createElement(
                         'form',
                         { className: 'pim-upload', onSubmit: onUpload },
                         createElement('input', {
                             type: 'file',
                             multiple: true,
                             accept: 'image/jpeg,image/png,image/webp',
-                            disabled: level !== 'images',
                             onChange: function (event) {
                                 setUploadFilesValue(event.target.files);
                             }
                         }),
-                        createElement('button', { className: 'button button-primary', type: 'submit', disabled: level !== 'images' }, 'Upload')
-                    ),
+                        createElement('button', { className: 'button button-primary', type: 'submit' }, 'Upload')
+                    ) : null,
                     createElement('div', { className: 'pim-status' }, status),
                     createElement(
                         'div',
                         { className: 'pim-image-grid' },
-                        level === 'images' && !images.length ? createElement('p', { className: 'pim-status' }, 'No images yet. Upload files to this product folder.') : null,
-                        level === 'images' ? images.map(function (image) {
+                        selectedProduct && !images.length ? createElement('p', { className: 'pim-status' }, 'No images yet. Upload files to this product folder.') : null,
+                        selectedProduct ? images.map(function (image) {
                             return createElement(
                                 'article',
                                 { className: 'pim-image-card', key: image.id },
