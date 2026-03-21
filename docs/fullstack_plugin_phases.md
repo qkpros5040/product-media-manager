@@ -5,6 +5,34 @@ This phase plan is derived from:
 - Product Image Manager - Architecture and Development Plan
 - Product Image Manager Plugin - Technical Architecture
 
+## Non-Negotiable Rule: Fullstack-Complete by Default
+
+Every feature must be implemented as a fullstack slice. No feature is considered complete if it only exists in one layer.
+
+For each feature, implementation must include all of the following:
+- Admin or frontend UI behavior (where applicable)
+- GraphQL query/mutation contract (or documented fallback endpoint)
+- Service/business logic
+- Data integration (WordPress/WooCommerce APIs)
+- Security controls (nonce, capability, sanitization, escaping)
+- Performance consideration (payload, query, or rendering impact)
+- Test coverage (happy path plus edge/failure cases)
+- Documentation update (behavior, endpoint, and constraints)
+
+If any layer is missing, the feature must remain in progress and cannot be marked done.
+
+## Fullstack Phase Gate Checklist
+
+Use this gate before closing any phase:
+- UI and UX behaviors implemented and validated
+- React component behaviors implemented with loading/error states
+- GraphQL handlers implemented with explicit error paths
+- Security checks enforced on every request path
+- Data writes and reads validated against WooCommerce/WordPress models
+- Performance impact reviewed for large category/product sets
+- Manual QA completed for admin and shop manager roles
+- Documentation updated for delivered scope
+
 ## Phase 0: Foundation and Project Bootstrap
 
 ### Goal
@@ -13,8 +41,9 @@ Set up a clean plugin baseline using the WordPress Plugin Boilerplate (WPPB) sty
 ### Scope
 - Create plugin root structure.
 - Register loader, i18n, admin, public modules.
-- Add assets pipeline for `admin` and `public` CSS/JS.
+- Add assets pipeline for admin and React public bundle.
 - Define constants, versioning, and activation/deactivation hooks.
+- Add WPGraphQL compatibility checks and schema bootstrap hooks.
 
 ### Deliverables
 - Plugin boots without errors in WordPress.
@@ -24,6 +53,7 @@ Set up a clean plugin baseline using the WordPress Plugin Boilerplate (WPPB) sty
 ### Exit Criteria
 - Plugin activates/deactivates cleanly.
 - Admin and public assets are loaded conditionally.
+- React app mount and GraphQL endpoint config are available.
 
 ## Phase 1: Admin Settings and Access Control
 
@@ -35,11 +65,13 @@ Allow administrators to configure categories and define who can use the plugin.
 - Load WooCommerce product categories in a multi-select control.
 - Save selected categories to `wp_options`.
 - Add capability checks for `administrator` and `shop_manager`.
+- Expose selected categories through GraphQL query.
 
 ### Deliverables
 - Settings UI with category selection and save action.
 - Persisted plugin settings with validation and sanitization.
 - Role-based access checks.
+- GraphQL resolver returning selected categories.
 
 ### Exit Criteria
 - Admin can save selected categories.
@@ -52,8 +84,8 @@ Build the folder-like user interface and navigation flow.
 
 ### Scope
 - Implement shortcode to mount plugin UI.
-- Build category folder list from configured categories.
-- Build product folder list for selected category via AJAX.
+- Build category folder list from GraphQL query.
+- Build product folder list for selected category via GraphQL query.
 - Build product detail panel for image management.
 - Add breadcrumb navigation.
 - Add product search.
@@ -63,7 +95,7 @@ Build the folder-like user interface and navigation flow.
   - Level 1: Categories
   - Level 2: Products
   - Level 3: Product Detail
-- AJAX endpoints for category/product loading.
+- GraphQL queries for category/product loading.
 - Responsive layout.
 
 ### Exit Criteria
@@ -77,14 +109,14 @@ Enable secure, multi-file drag-and-drop upload with progress feedback.
 
 ### Scope
 - Integrate Dropzone.js in product detail view.
-- Implement upload AJAX endpoint.
-- Add nonce and capability validation in controller.
+- Implement GraphQL-compatible upload strategy (multipart GraphQL or secure fallback endpoint).
+- Add nonce/session and capability validation in upload path.
 - Validate file type and size.
 - Return structured JSON responses with per-file status.
 
 ### Deliverables
 - Drag-and-drop uploader with progress UI.
-- Upload endpoint connected to media service.
+- Upload transport connected to media service.
 - Error messaging for invalid files and permission failures.
 
 ### Exit Criteria
@@ -97,7 +129,7 @@ Enable secure, multi-file drag-and-drop upload with progress feedback.
 Process files server-side and attach them to WooCommerce products using naming rules.
 
 ### Scope
-- Create media handler service (`services/class-media-handler.php`).
+- Create media handler service and GraphQL mutation handlers.
 - Fetch product SKU from meta.
 - Rename files with sequence format: `SKU-1.jpg`, `SKU-2.jpg`, etc.
 - Upload through WordPress media APIs.
@@ -120,12 +152,12 @@ Allow managers to view and manage existing product images.
 ### Scope
 - Fetch featured and gallery images.
 - Render thumbnails in product detail view.
-- Detach image from product via AJAX (do not delete attachment file).
-- Set selected image as featured.
+- Detach image from product via GraphQL mutation (do not delete attachment file).
+- Set selected image as featured via GraphQL mutation.
 
 ### Deliverables
 - Image grid with action controls.
-- AJAX endpoints for detach and set-featured.
+- GraphQL mutations for detach and set-featured.
 - Consistent success and error feedback.
 
 ### Exit Criteria
@@ -159,14 +191,14 @@ Polish usability and speed for day-to-day manager workflows.
 Ensure all endpoints and data paths are protected.
 
 ### Scope
-- Enforce nonce checks in all AJAX actions.
-- Enforce capability checks per endpoint.
+- Enforce capability checks per GraphQL resolver and mutation.
+- Enforce nonce/session checks on upload and fallback endpoints.
 - Sanitize all request inputs.
 - Escape output in templates.
 - Add centralized error handling for security violations.
 
 ### Deliverables
-- Security checklist implemented across admin/public/AJAX.
+- Security checklist implemented across admin/public/GraphQL.
 - Unified error response format.
 
 ### Exit Criteria
@@ -181,8 +213,8 @@ Keep the interface responsive with large catalogs.
 ### Scope
 - Add pagination for product lists.
 - Add lazy loading/incremental loading.
-- Optimize `WP_Query` usage and selected fields.
-- Minimize duplicate AJAX calls and payload size.
+- Optimize `WP_Query` usage and selected fields in GraphQL resolvers.
+- Minimize duplicate GraphQL calls and payload size.
 - Add client-side caching for navigation state.
 
 ### Deliverables
