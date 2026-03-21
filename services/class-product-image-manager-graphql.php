@@ -327,6 +327,6 @@ class Product_Image_Manager_GraphQL
 
     private function can_access_manager()
     {
-        return current_user_can('manage_woocommerce') || current_user_can('edit_products');
+        return current_user_can('manage_options') || current_user_can('edit_products');
     }
 }
