@@ -404,6 +404,24 @@
             setStatus('');
         }
 
+        function toggleCategory(category) {
+            var categoryId = Number(category.id);
+            var isSameCategory = selectedCategory && Number(selectedCategory.id) === categoryId;
+
+            if (isSameCategory) {
+                setSelectedCategory(null);
+                setSelectedProduct(null);
+                setProducts([]);
+                setImages([]);
+                setSearch('');
+                setLevel('categories');
+                setStatus('');
+                return;
+            }
+
+            openCategory(category);
+        }
+
         async function openProduct(product) {
             var nextProduct = {
                 id: Number(product.id),
@@ -491,12 +509,12 @@
                                         className: 'pim-tree-item pim-tree-item-category' + (isActiveCategory ? ' is-active' : ''),
                                         type: 'button',
                                         onClick: function () {
-                                            openCategory(category);
+                                            toggleCategory(category);
                                         }
                                     },
                                     createElement('span', { className: 'pim-tree-icon' }, '\ud83d\udcc1'),
                                     createElement('span', { className: 'pim-tree-label' }, category.name),
-                                    createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? 'Open' : '')
+                                    createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? '▼ Open' : '▶ Closed')
                                 ),
                                 isActiveCategory ? createElement(
                                     'div',

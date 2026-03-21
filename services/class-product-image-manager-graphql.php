@@ -128,7 +128,7 @@ class Product_Image_Manager_GraphQL
                 $query = new WP_Query(array(
                     'post_type' => 'product',
                     'post_status' => 'publish',
-                    'posts_per_page' => 30,
+                    'posts_per_page' => -1,
                     's' => $search,
                     'tax_query' => array(
                         array(

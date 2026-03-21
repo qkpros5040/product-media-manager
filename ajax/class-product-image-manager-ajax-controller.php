@@ -43,7 +43,7 @@ class Product_Image_Manager_Ajax_Controller
         $args = array(
             'post_type' => 'product',
             'post_status' => 'publish',
-            'posts_per_page' => 30,
+            'posts_per_page' => -1,
             's' => $search,
             'tax_query' => array(
                 array(
