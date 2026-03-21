@@ -416,6 +416,17 @@
             await fetchImages(nextProduct.id);
         }
 
+        function goBackFolder() {
+            if (level === 'images') {
+                goToProducts();
+                return;
+            }
+
+            if (level === 'products') {
+                goToCategories();
+            }
+        }
+
         var explorerTitle = 'Categories';
         if (level === 'products') {
             explorerTitle = selectedCategory ? selectedCategory.name : 'Products';
@@ -459,7 +470,16 @@
                 'div',
                 { className: 'pim-header' },
                 createElement('h2', null, 'Product Image Manager'),
-                breadcrumb
+                createElement(
+                    'div',
+                    { className: 'pim-header-nav' },
+                    level !== 'categories' ? createElement(
+                        'button',
+                        { type: 'button', className: 'pim-back-folder-btn', onClick: goBackFolder },
+                        '\u2190 Back Folder'
+                    ) : null,
+                    breadcrumb
+                )
             ),
             createElement(
                 'div',
