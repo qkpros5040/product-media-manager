@@ -20,6 +20,7 @@ require_once PIM_PLUGIN_DIR . 'includes/class-product-image-manager-loader.php';
 require_once PIM_PLUGIN_DIR . 'includes/class-product-image-manager-i18n.php';
 require_once PIM_PLUGIN_DIR . 'services/class-product-image-manager-media-handler.php';
 require_once PIM_PLUGIN_DIR . 'services/class-product-image-manager-graphql.php';
+require_once PIM_PLUGIN_DIR . 'services/class-product-image-manager-graphql-handler.php';
 require_once PIM_PLUGIN_DIR . 'ajax/class-product-image-manager-ajax-controller.php';
 require_once PIM_PLUGIN_DIR . 'admin/class-product-image-manager-admin.php';
 require_once PIM_PLUGIN_DIR . 'public/class-product-image-manager-public.php';

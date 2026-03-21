@@ -68,6 +68,9 @@ class Product_Image_Manager
     {
         $graphql_service = new Product_Image_Manager_GraphQL();
         $this->loader->add_action('graphql_register_types', $graphql_service, 'register_schema');
+
+        $graphql_handler = new Product_Image_Manager_GraphQL_Handler();
+        $this->loader->add_action('rest_api_init', $graphql_handler, 'init');
     }
 
     public function run()
