@@ -124,7 +124,14 @@
         useEffect(function () {
             async function loadCategories() {
                 if (!pimConfig.hasWpGraphql) {
-                    setStatus('WPGraphQL is required. Install and activate WPGraphQL.');
+                    setCategories(pimConfig.bootstrapCategories || []);
+
+                    if (!pimConfig.bootstrapCategories || !pimConfig.bootstrapCategories.length) {
+                        setStatus((pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.');
+                    } else {
+                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using settings categories.');
+                    }
+
                     return;
                 }
 
@@ -132,9 +139,19 @@
                     var data = await requestGraphQL(
                         'query PIMCategories { pimSelectedCategories { id name } }'
                     );
-                    setCategories(data.pimSelectedCategories || []);
+                    var loadedCategories = data.pimSelectedCategories || [];
+                    if (!loadedCategories.length && pimConfig.bootstrapCategories && pimConfig.bootstrapCategories.length) {
+                        setCategories(pimConfig.bootstrapCategories);
+                    } else {
+                        setCategories(loadedCategories);
+                    }
                 } catch (error) {
-                    setStatus(error.message);
+                    if (pimConfig.bootstrapCategories && pimConfig.bootstrapCategories.length) {
+                        setCategories(pimConfig.bootstrapCategories);
+                        setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Using settings categories.');
+                    } else {
+                        setStatus(error.message || ((pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.'));
+                    }
                 }
             }
 
@@ -263,6 +280,7 @@
                     createElement(
                         'div',
                         { className: 'pim-folder-grid' },
+                        !categories.length ? createElement('p', { className: 'pim-status' }, (pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.') : null,
                         categories.map(function (category) {
                             return createElement(
                                 'button',

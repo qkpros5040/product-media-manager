@@ -36,6 +36,23 @@ class Product_Image_Manager_Public
             return;
         }
 
+        $selected_categories = array_map('absint', get_option('pim_selected_categories', array()));
+        $terms = get_terms(array(
+            'taxonomy' => 'product_cat',
+            'hide_empty' => false,
+            'include' => $selected_categories,
+        ));
+
+        $bootstrap_categories = array();
+        if (!is_wp_error($terms) && is_array($terms)) {
+            foreach ($terms as $term) {
+                $bootstrap_categories[] = array(
+                    'id' => (int) $term->term_id,
+                    'name' => $term->name,
+                );
+            }
+        }
+
         wp_enqueue_script(
             $this->plugin_name . '-public',
             PIM_PLUGIN_URL . 'public/js/product-image-manager-public.js',
@@ -48,10 +65,15 @@ class Product_Image_Manager_Public
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'graphqlUrl' => site_url('/graphql'),
             'nonce' => wp_create_nonce('pim_ajax_nonce'),
-            'selectedCategories' => array_map('absint', get_option('pim_selected_categories', array())),
+            'selectedCategories' => $selected_categories,
+            'bootstrapCategories' => $bootstrap_categories,
             'canManage' => current_user_can('manage_woocommerce'),
             'hasWpGraphql' => function_exists('register_graphql_field'),
             'hasGraphqlUpload' => class_exists('WPGraphQL') && method_exists('WPGraphQL', 'get_type_registry') && is_object(WPGraphQL::get_type_registry()) && method_exists(WPGraphQL::get_type_registry(), 'get_type') && (bool) WPGraphQL::get_type_registry()->get_type('Upload'),
+            'messages' => array(
+                'noCategoriesConfigured' => __('No categories are configured. Go to Product Image Manager Settings and select at least one category.', 'product-image-manager'),
+                'graphqlUnavailable' => __('WPGraphQL is unavailable. Showing configured categories from settings.', 'product-image-manager'),
+            ),
         ));
     }
 
