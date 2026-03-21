@@ -10,44 +10,7 @@ on:
 
 jobs:
   build-deploy:
-    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: mbstring, intl, json, dom
-
-      - name: Install dependencies (npm)
-        run: |
-          if [ -f package.json ]; then npm ci; fi
-
-      - name: Build assets (if applicable)
-        run: |
-          if [ -f package.json ]; then npm run build || true; fi
-
-      - name: Lint PHP
-        run: |
-          if [ -f composer.json ]; then composer install --no-interaction; fi
-          find . -name '*.php' -print0 | xargs -0 -n1 php -l
-
-      - name: Archive plugin
-        run: |
-          zip -r product-media-manager.zip . -x '*.git*' 'node_modules/*' '*.github*' '*.DS_Store'
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: product-media-manager
-          path: product-media-manager.zip
 
       # --- Deployment step example ---
       # Uncomment and configure the following step for your deployment target
