@@ -108,13 +108,15 @@
     background: linear-gradient(135deg, #0f766e 60%, #159287 100%) !important;
     color: #fff !important;
     padding: 12px 22px;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 800;
     cursor: pointer;
     box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18), 0 2px 8px rgba(0,0,0,0.06);
     border-radius: 999px;
     transition: background 0.18s, box-shadow 0.18s, border 0.18s;
     outline: none;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.18), 0 0px 1px #0a5c56;
+    letter-spacing: 0.01em;
 }
 
 .pim-back-folder-btn:hover {
