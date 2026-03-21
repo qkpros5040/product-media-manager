@@ -109,17 +109,21 @@
         var search = _useState5[0];
         var setSearch = _useState5[1];
 
-        var _useState6 = useState(null);
-        var categoryId = _useState6[0];
-        var setCategoryId = _useState6[1];
+        var _useState6 = useState('categories');
+        var level = _useState6[0];
+        var setLevel = _useState6[1];
 
         var _useState7 = useState(null);
-        var productId = _useState7[0];
-        var setProductId = _useState7[1];
+        var selectedCategory = _useState7[0];
+        var setSelectedCategory = _useState7[1];
 
         var _useState8 = useState(null);
-        var uploadFilesValue = _useState8[0];
-        var setUploadFilesValue = _useState8[1];
+        var selectedProduct = _useState8[0];
+        var setSelectedProduct = _useState8[1];
+
+        var _useState9 = useState(null);
+        var uploadFilesValue = _useState9[0];
+        var setUploadFilesValue = _useState9[1];
 
         useEffect(function () {
             async function loadCategories() {
@@ -159,7 +163,7 @@
         }, []);
 
         useEffect(function () {
-            if (!categoryId) {
+            if (!selectedCategory || !selectedCategory.id || level !== 'products') {
                 return;
             }
 
@@ -167,7 +171,7 @@
                 try {
                     var data = await requestGraphQL(
                         'query PIMProducts($categoryId: Int!, $search: String) { pimProducts(categoryId: $categoryId, search: $search) { id name hasImages } }',
-                        { categoryId: categoryId, search: search }
+                        { categoryId: selectedCategory.id, search: search }
                     );
                     setProducts(data.pimProducts || []);
                 } catch (error) {
@@ -176,7 +180,7 @@
             }
 
             loadProducts();
-        }, [categoryId, search]);
+        }, [selectedCategory, search, level]);
 
         async function fetchImages(activeProductId) {
             try {
@@ -194,9 +198,9 @@
             try {
                 await requestGraphQL(
                     'mutation PIMDetach($productId: Int!, $attachmentId: Int!) { pimDetachProductImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
-                    { productId: productId, attachmentId: attachmentId }
+                    { productId: selectedProduct.id, attachmentId: attachmentId }
                 );
-                await fetchImages(productId);
+                await fetchImages(selectedProduct.id);
             } catch (error) {
                 setStatus(error.message);
             }
@@ -206,9 +210,9 @@
             try {
                 await requestGraphQL(
                     'mutation PIMSetFeatured($productId: Int!, $attachmentId: Int!) { pimSetFeaturedImage(input: { productId: $productId, attachmentId: $attachmentId }) { success message } }',
-                    { productId: productId, attachmentId: attachmentId }
+                    { productId: selectedProduct.id, attachmentId: attachmentId }
                 );
-                await fetchImages(productId);
+                await fetchImages(selectedProduct.id);
             } catch (error) {
                 setStatus(error.message);
             }
@@ -217,7 +221,7 @@
         async function onUpload(event) {
             event.preventDefault();
 
-            if (!productId) {
+            if (!selectedProduct || !selectedProduct.id) {
                 setStatus('Select a product first.');
                 return;
             }
@@ -231,7 +235,7 @@
                 var response;
 
                 if (pimConfig.hasGraphqlUpload) {
-                    response = await uploadFilesGraphQL(productId, uploadFilesValue);
+                    response = await uploadFilesGraphQL(selectedProduct.id, uploadFilesValue);
 
                     if (response.errors && response.errors.length) {
                         throw new Error(response.errors[0].message || 'GraphQL upload failed.');
@@ -241,25 +245,97 @@
                         throw new Error((response.data && response.data.pimUploadProductImages && response.data.pimUploadProductImages.message) || 'Upload failed.');
                     }
                 } else {
-                    response = await uploadFilesLegacy(productId, uploadFilesValue);
+                    response = await uploadFilesLegacy(selectedProduct.id, uploadFilesValue);
                     if (!response.success) {
                         throw new Error((response.data && response.data.message) || 'Upload failed.');
                     }
                 }
 
                 setStatus('Upload complete.');
-                await fetchImages(productId);
+                await fetchImages(selectedProduct.id);
             } catch (error) {
                 setStatus(error.message || 'Upload failed.');
             }
         }
 
-        var breadcrumb = 'Categories';
-        if (categoryId && productId) {
-            breadcrumb = 'Categories / Products / Images';
-        } else if (categoryId) {
-            breadcrumb = 'Categories / Products';
+        function goToCategories() {
+            setLevel('categories');
+            setSelectedCategory(null);
+            setSelectedProduct(null);
+            setProducts([]);
+            setImages([]);
+            setSearch('');
         }
+
+        function goToProducts() {
+            if (!selectedCategory) {
+                return;
+            }
+
+            setLevel('products');
+            setSelectedProduct(null);
+            setImages([]);
+        }
+
+        function openCategory(category) {
+            setSelectedCategory({
+                id: Number(category.id),
+                name: category.name
+            });
+            setSelectedProduct(null);
+            setImages([]);
+            setSearch('');
+            setLevel('products');
+            setStatus('');
+        }
+
+        async function openProduct(product) {
+            var nextProduct = {
+                id: Number(product.id),
+                name: product.name
+            };
+
+            setSelectedProduct(nextProduct);
+            setLevel('images');
+            setStatus('');
+            await fetchImages(nextProduct.id);
+        }
+
+        var explorerTitle = 'Categories';
+        if (level === 'products') {
+            explorerTitle = selectedCategory ? selectedCategory.name : 'Products';
+        }
+        if (level === 'images') {
+            explorerTitle = selectedProduct ? selectedProduct.name : 'Images';
+        }
+
+        var explorerItems = [];
+        if (level === 'categories') {
+            explorerItems = categories;
+        }
+        if (level === 'products') {
+            explorerItems = products;
+        }
+
+        var breadcrumb = createElement(
+            'div',
+            { className: 'pim-breadcrumb' },
+            createElement(
+                'button',
+                { type: 'button', className: 'pim-crumb', onClick: goToCategories },
+                'Categories'
+            ),
+            selectedCategory ? createElement(
+                'button',
+                { type: 'button', className: 'pim-crumb', onClick: goToProducts },
+                selectedCategory.name
+            ) : null,
+            selectedProduct ? createElement(
+                'span',
+                { className: 'pim-crumb pim-crumb-current' },
+                selectedProduct.name
+            ) : null
+        );
 
         return createElement(
             'div',
@@ -267,78 +343,60 @@
             createElement(
                 'div',
                 { className: 'pim-header' },
-                createElement('h2', null, 'Product Image Manager (React + GraphQL)'),
-                createElement('div', { className: 'pim-breadcrumb' }, breadcrumb)
+                createElement('h2', null, 'Product Image Manager'),
+                breadcrumb
             ),
             createElement(
                 'div',
-                { className: 'pim-columns' },
+                { className: 'pim-explorer' },
                 createElement(
                     'section',
-                    { className: 'pim-panel' },
-                    createElement('h3', null, 'Categories'),
-                    createElement(
-                        'div',
-                        { className: 'pim-folder-grid' },
-                        !categories.length ? createElement('p', { className: 'pim-status' }, (pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.') : null,
-                        categories.map(function (category) {
-                            return createElement(
-                                'button',
-                                {
-                                    key: category.id,
-                                    className: 'pim-folder',
-                                    type: 'button',
-                                    onClick: function () {
-                                        setCategoryId(Number(category.id));
-                                        setProductId(null);
-                                        setImages([]);
-                                    }
-                                },
-                                createElement('span', { className: 'pim-folder-icon pim-folder-neutral' }),
-                                createElement('span', { className: 'pim-folder-label' }, category.name)
-                            );
-                        })
-                    )
-                ),
-                createElement(
-                    'section',
-                    { className: 'pim-panel' },
-                    createElement('h3', null, 'Products'),
-                    createElement('input', {
+                    { className: 'pim-panel pim-panel-explorer' },
+                    createElement('h3', null, explorerTitle),
+                    level === 'products' ? createElement('input', {
                         className: 'pim-search',
                         type: 'search',
                         value: search,
                         onChange: function (event) {
                             setSearch(event.target.value);
                         },
-                        placeholder: 'Search products'
-                    }),
+                        placeholder: 'Search products in this folder'
+                    }) : null,
                     createElement(
                         'div',
                         { className: 'pim-folder-grid' },
-                        products.map(function (product) {
+                        level === 'categories' && !categories.length ? createElement('p', { className: 'pim-status' }, (pimConfig.messages && pimConfig.messages.noCategoriesConfigured) || 'No categories configured.') : null,
+                        level === 'products' && selectedCategory && !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
+                        explorerItems.map(function (item) {
+                            var isCategory = level === 'categories';
+                            var folderStateClass = isCategory ? 'pim-folder-neutral' : (item.hasImages ? 'pim-folder-green' : 'pim-folder-red');
+
                             return createElement(
                                 'button',
                                 {
-                                    key: product.id,
-                                    className: 'pim-folder',
+                                    key: item.id,
+                                    className: 'pim-folder pim-folder-drive',
                                     type: 'button',
                                     onClick: function () {
-                                        var id = Number(product.id);
-                                        setProductId(id);
-                                        fetchImages(id);
+                                        if (isCategory) {
+                                            openCategory(item);
+                                        } else {
+                                            openProduct(item);
+                                        }
                                     }
                                 },
-                                createElement('span', { className: 'pim-folder-icon ' + (product.hasImages ? 'pim-folder-green' : 'pim-folder-red') }),
-                                createElement('span', { className: 'pim-folder-label' }, product.name)
+                                createElement('span', { className: 'pim-folder-icon ' + folderStateClass }),
+                                createElement('span', { className: 'pim-folder-label' }, item.name),
+                                createElement('span', { className: 'pim-folder-open' }, 'Open')
                             );
                         })
                     )
                 ),
                 createElement(
                     'section',
-                    { className: 'pim-panel' },
-                    createElement('h3', null, 'Images'),
+                    { className: 'pim-panel pim-panel-images' },
+                    createElement('h3', null, 'Image Upload'),
+                    level !== 'images' ? createElement('p', { className: 'pim-status' }, 'Open a product folder to upload and manage images.') : null,
                     createElement(
                         'form',
                         { className: 'pim-upload', onSubmit: onUpload },
@@ -346,17 +404,19 @@
                             type: 'file',
                             multiple: true,
                             accept: 'image/jpeg,image/png,image/webp',
+                            disabled: level !== 'images',
                             onChange: function (event) {
                                 setUploadFilesValue(event.target.files);
                             }
                         }),
-                        createElement('button', { className: 'button button-primary', type: 'submit' }, 'Upload')
+                        createElement('button', { className: 'button button-primary', type: 'submit', disabled: level !== 'images' }, 'Upload')
                     ),
                     createElement('div', { className: 'pim-status' }, status),
                     createElement(
                         'div',
                         { className: 'pim-image-grid' },
-                        images.map(function (image) {
+                        level === 'images' && !images.length ? createElement('p', { className: 'pim-status' }, 'No images yet. Upload files to this product folder.') : null,
+                        level === 'images' ? images.map(function (image) {
                             return createElement(
                                 'article',
                                 { className: 'pim-image-card', key: image.id },
@@ -374,7 +434,7 @@
                                     createElement('button', { className: 'button', type: 'button', onClick: function () { onDetach(Number(image.id)); } }, 'Detach')
                                 )
                             );
-                        })
+                        }) : null
                     )
                 )
             )
