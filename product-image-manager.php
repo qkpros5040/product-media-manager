@@ -31,6 +31,39 @@ function pim_activate_plugin()
     if (!get_option('pim_selected_categories')) {
         add_option('pim_selected_categories', array());
     }
+    
+    pim_create_product_manager_role();
+}
+
+function pim_create_product_manager_role()
+{
+    // Create Product Manager role if it doesn't exist
+    $product_manager = get_role('product_manager');
+    
+    if (!$product_manager) {
+        add_role(
+            'product_manager',
+            __('Product Manager', 'product-image-manager'),
+            array(
+                'manage_product_images' => true,
+                'edit_products' => true,
+                'read_products' => true,
+                'upload_files' => true,
+            )
+        );
+    }
+    
+    // Grant capability to product_manager role
+    $product_manager_role = get_role('product_manager');
+    if ($product_manager_role && !$product_manager_role->has_cap('manage_product_images')) {
+        $product_manager_role->add_cap('manage_product_images');
+    }
+    
+    // Ensure administrator has the capability
+    $admin_role = get_role('administrator');
+    if ($admin_role && !$admin_role->has_cap('manage_product_images')) {
+        $admin_role->add_cap('manage_product_images');
+    }
 }
 
 function pim_deactivate_plugin()
