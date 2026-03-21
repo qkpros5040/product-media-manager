@@ -15,14 +15,34 @@ class Product_Image_Manager_Admin
         $this->version = $version;
     }
 
-    public function enqueue_styles()
+    public function enqueue_styles($hook_suffix)
     {
-        // Reserved for dedicated admin styles.
+        if ($hook_suffix !== 'toplevel_page_product-image-manager') {
+            return;
+        }
+
+        wp_enqueue_style(
+            $this->plugin_name . '-admin',
+            PIM_PLUGIN_URL . 'admin/css/product-image-manager-admin.css',
+            array(),
+            $this->version,
+            'all'
+        );
     }
 
-    public function enqueue_scripts()
+    public function enqueue_scripts($hook_suffix)
     {
-        // Reserved for dedicated admin scripts.
+        if ($hook_suffix !== 'toplevel_page_product-image-manager') {
+            return;
+        }
+
+        wp_enqueue_script(
+            $this->plugin_name . '-admin',
+            PIM_PLUGIN_URL . 'admin/js/product-image-manager-admin.js',
+            array(),
+            $this->version,
+            true
+        );
     }
 
     public function add_plugin_admin_menu()

@@ -20,7 +20,7 @@ This repository follows a strict fullstack-complete rule:
 
 Development has started with a Phase 0 and Phase 1 baseline scaffold:
 - Plugin bootstrap and loader architecture
-- Admin settings page for category selection
+- Professional admin settings page with searchable category selection and quick actions
 - Public shortcode shell with React mount root
 - GraphQL schema service for category/product/image queries and mutations
 - Media handler service for upload, detach, and featured-image actions
