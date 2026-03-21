@@ -238,7 +238,7 @@
 
                 if (pimConfig.hasWpGraphql) {
                     var data = await requestGraphQL(
-                        'query PIMProducts($categoryId: Int!, $search: String, $limit: Int, $offset: Int) { pimProducts(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) { id name hasImages } }',
+                        'query PIMProducts($categoryId: Int!, $search: String, $limit: Int, $offset: Int) { pimProducts(categoryId: $categoryId, search: $search, limit: $limit, offset: $offset) { id name hasImages permalink } }',
                         {
                             categoryId: selectedCategory.id,
                             search: search,
@@ -639,13 +639,22 @@
         async function openProduct(product) {
             var nextProduct = {
                 id: Number(product.id),
-                name: decodeEntities(product.name)
+                name: decodeEntities(product.name),
+                permalink: product.permalink || ''
             };
 
             setSelectedProduct(nextProduct);
             setLevel('images');
             setStatus('');
             await fetchImages(nextProduct.id);
+        }
+
+        function openSelectedProductPage() {
+            if (!selectedProduct || !selectedProduct.permalink) {
+                return;
+            }
+
+            window.open(selectedProduct.permalink, '_blank', 'noopener');
         }
 
         function goBackFolder() {
@@ -749,15 +758,31 @@
                                 isActiveCategory ? createElement(
                                     'div',
                                     { className: 'pim-tree-children' },
-                                    createElement('input', {
-                                        className: 'pim-search',
-                                        type: 'search',
-                                        value: search,
-                                        onChange: function (event) {
-                                            setSearch(event.target.value);
-                                        },
-                                        placeholder: 'Search products in this category'
-                                    }),
+                                    createElement(
+                                        'div',
+                                        { className: 'pim-search-shell' },
+                                        createElement('span', { className: 'pim-search-icon' }, '\ud83d\udd0d'),
+                                        createElement('input', {
+                                            className: 'pim-search',
+                                            type: 'search',
+                                            value: search,
+                                            onChange: function (event) {
+                                                setSearch(event.target.value);
+                                            },
+                                            placeholder: 'Search products in this category'
+                                        }),
+                                        search ? createElement(
+                                            'button',
+                                            {
+                                                type: 'button',
+                                                className: 'pim-search-clear',
+                                                onClick: function () {
+                                                    setSearch('');
+                                                }
+                                            },
+                                            'Clear'
+                                        ) : null
+                                    ),
                                     isLoadingProducts ? createElement('p', { className: 'pim-status' }, 'Loading products...') : null,
                                     !isLoadingProducts && !products.length ? createElement('p', { className: 'pim-status' }, 'No products found in this category.') : null,
                                     createElement(
@@ -811,7 +836,17 @@
                         'div',
                         { className: 'pim-panel-head' },
                         createElement('h3', null, selectedProduct ? ('Image Upload: ' + selectedProduct.name) : 'Image Upload'),
-                        createElement('p', { className: 'pim-panel-note' }, selectedProduct ? 'Queue files, reorder them, and upload safely with per-file progress.' : 'Select a product in the hierarchy to begin.')
+                        createElement('p', { className: 'pim-panel-note' }, selectedProduct ? 'Queue files, reorder them, and upload safely with per-file progress.' : 'Select a product in the hierarchy to begin.'),
+                        selectedProduct ? createElement(
+                            'button',
+                            {
+                                type: 'button',
+                                className: 'button pim-open-product-btn',
+                                onClick: openSelectedProductPage,
+                                disabled: !selectedProduct.permalink
+                            },
+                            'Open Product'
+                        ) : null
                     ),
                     !selectedProduct ? createElement('p', { className: 'pim-status' }, 'Select a product in the hierarchy to upload and manage images.') : null,
                     selectedProduct ? createElement(

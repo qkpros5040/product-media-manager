@@ -77,6 +77,7 @@ class Product_Image_Manager_Ajax_Controller
                 'id' => $product_id,
                 'name' => html_entity_decode((string) get_the_title($product_id), ENT_QUOTES, 'UTF-8'),
                 'hasImages' => (bool) $has_images,
+                'permalink' => get_permalink($product_id),
             );
         }
 

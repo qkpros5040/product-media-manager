@@ -38,6 +38,7 @@ class Product_Image_Manager_GraphQL
                 'id' => array('type' => 'Int'),
                 'name' => array('type' => 'String'),
                 'hasImages' => array('type' => 'Boolean'),
+                'permalink' => array('type' => 'String'),
             ),
         ));
 
@@ -162,6 +163,7 @@ class Product_Image_Manager_GraphQL
                         'id' => (int) $product_id,
                         'name' => html_entity_decode((string) get_the_title($product_id), ENT_QUOTES, 'UTF-8'),
                         'hasImages' => (bool) $has_images,
+                        'permalink' => get_permalink($product_id),
                     );
                 }
 
