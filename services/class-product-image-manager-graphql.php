@@ -321,7 +321,7 @@ class Product_Image_Manager_GraphQL
     private function authorize_graphql()
     {
         if (!$this->can_access_manager()) {
-            throw new GraphQL\Error\UserError(__('Unauthorized request.', 'product-image-manager'));
+            throw new GraphQL\Error\UserError(__('Unauthorized request. from plugin', 'product-image-manager'));
         }
     }
 
