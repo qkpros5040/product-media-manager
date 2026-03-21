@@ -14,6 +14,9 @@ class Product_Image_Manager_Media_Handler
         $featured_id = get_post_thumbnail_id($product_id);
         $gallery_raw = get_post_meta($product_id, '_product_image_gallery', true);
         $gallery_ids = array_filter(array_map('absint', explode(',', (string) $gallery_raw)));
+        $gallery_ids = array_values(array_filter($gallery_ids, function ($id) use ($featured_id) {
+            return (int) $id !== (int) $featured_id;
+        }));
 
         $images = array();
 
@@ -102,9 +105,11 @@ class Product_Image_Manager_Media_Handler
             $attachment_meta = wp_generate_attachment_metadata($attachment_id, $upload['file']);
             wp_update_attachment_metadata($attachment_id, $attachment_meta);
 
-            $this->append_to_gallery($product_id, $attachment_id);
             if (!has_post_thumbnail($product_id)) {
                 set_post_thumbnail($product_id, $attachment_id);
+                $this->remove_from_gallery($product_id, $attachment_id);
+            } else {
+                $this->append_to_gallery($product_id, $attachment_id);
             }
 
             $responses[] = array(
@@ -144,6 +149,8 @@ class Product_Image_Manager_Media_Handler
         if (!$updated) {
             return array('success' => false, 'message' => __('Unable to set featured image.', 'product-image-manager'));
         }
+
+        $this->remove_from_gallery($product_id, $attachment_id);
 
         return array('success' => true, 'message' => __('Featured image updated.', 'product-image-manager'));
     }
@@ -206,6 +213,17 @@ class Product_Image_Manager_Media_Handler
         if (!in_array((int) $attachment_id, $gallery_ids, true)) {
             $gallery_ids[] = (int) $attachment_id;
         }
+
+        update_post_meta($product_id, '_product_image_gallery', implode(',', $gallery_ids));
+    }
+
+    private function remove_from_gallery($product_id, $attachment_id)
+    {
+        $gallery_raw = get_post_meta($product_id, '_product_image_gallery', true);
+        $gallery_ids = array_filter(array_map('absint', explode(',', (string) $gallery_raw)));
+        $gallery_ids = array_values(array_filter($gallery_ids, function ($id) use ($attachment_id) {
+            return (int) $id !== (int) $attachment_id;
+        }));
 
         update_post_meta($product_id, '_product_image_gallery', implode(',', $gallery_ids));
     }

@@ -17,6 +17,12 @@
         return;
     }
 
+    function decodeEntities(value) {
+        var textarea = document.createElement('textarea');
+        textarea.innerHTML = value || '';
+        return textarea.value;
+    }
+
     async function requestGraphQL(query, variables) {
         var response = await fetch(pimConfig.graphqlUrl, {
             method: 'POST',
@@ -605,7 +611,7 @@
         function openCategory(category) {
             setSelectedCategory({
                 id: Number(category.id),
-                name: category.name
+                name: decodeEntities(category.name)
             });
             setSelectedProduct(null);
             setImages([]);
@@ -633,7 +639,7 @@
         async function openProduct(product) {
             var nextProduct = {
                 id: Number(product.id),
-                name: product.name
+                name: decodeEntities(product.name)
             };
 
             setSelectedProduct(nextProduct);
@@ -682,7 +688,17 @@
             createElement(
                 'div',
                 { className: 'pim-header' },
-                createElement('h2', null, 'Product Image Manager'),
+                createElement(
+                    'div',
+                    { className: 'pim-header-main' },
+                    createElement('span', { className: 'pim-eyebrow' }, 'Media Workspace'),
+                    createElement('h2', null, 'Product Image Manager'),
+                    createElement(
+                        'p',
+                        { className: 'pim-subtitle' },
+                        selectedProduct ? 'Manage the featured image and gallery for the selected product.' : 'Browse categories, open a product, and manage uploads from one place.'
+                    )
+                ),
                 createElement(
                     'div',
                     { className: 'pim-header-nav' },
@@ -700,7 +716,12 @@
                 createElement(
                     'section',
                     { className: 'pim-panel pim-panel-tree' },
-                    createElement('h3', null, 'Folder Hierarchy'),
+                    createElement(
+                        'div',
+                        { className: 'pim-panel-head' },
+                        createElement('h3', null, 'Folder Hierarchy'),
+                        createElement('p', { className: 'pim-panel-note' }, 'Open a category to reveal its products.')
+                    ),
                     createElement(
                         'div',
                         { className: 'pim-tree' },
@@ -722,7 +743,7 @@
                                         }
                                     },
                                     createElement('span', { className: 'pim-tree-icon' }, '\ud83d\udcc1'),
-                                    createElement('span', { className: 'pim-tree-label' }, category.name),
+                                    createElement('span', { className: 'pim-tree-label' }, decodeEntities(category.name)),
                                     createElement('span', { className: 'pim-tree-state' }, isActiveCategory ? '\u25bc Open' : '\u25b6 Closed')
                                 ),
                                 isActiveCategory ? createElement(
@@ -757,7 +778,12 @@
                                                     }
                                                 },
                                                 createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
-                                                createElement('span', { className: 'pim-tree-label' }, product.name)
+                                                createElement(
+                                                    'span',
+                                                    { className: 'pim-tree-product-copy' },
+                                                    createElement('span', { className: 'pim-tree-label' }, decodeEntities(product.name)),
+                                                    createElement('span', { className: 'pim-tree-meta' }, product.hasImages ? 'Has images' : 'No images yet')
+                                                )
                                             );
                                         }) : null
                                     ),
@@ -781,7 +807,12 @@
                 createElement(
                     'section',
                     { className: 'pim-panel pim-panel-images' },
-                    createElement('h3', null, selectedProduct ? ('Image Upload: ' + selectedProduct.name) : 'Image Upload'),
+                    createElement(
+                        'div',
+                        { className: 'pim-panel-head' },
+                        createElement('h3', null, selectedProduct ? ('Image Upload: ' + selectedProduct.name) : 'Image Upload'),
+                        createElement('p', { className: 'pim-panel-note' }, selectedProduct ? 'Queue files, reorder them, and upload safely with per-file progress.' : 'Select a product in the hierarchy to begin.')
+                    ),
                     !selectedProduct ? createElement('p', { className: 'pim-status' }, 'Select a product in the hierarchy to upload and manage images.') : null,
                     selectedProduct ? createElement(
                         'form',
@@ -789,14 +820,26 @@
                         createElement(
                             'div',
                             { className: 'pim-uploader-box' },
-                            createElement('input', {
-                                ref: fileInputRef,
-                                type: 'file',
-                                multiple: true,
-                                accept: 'image/jpeg,image/png,image/webp',
-                                disabled: isUploading,
-                                onChange: onFilesSelected
-                            }),
+                            createElement(
+                                'div',
+                                { className: 'pim-file-picker' },
+                                createElement('input', {
+                                    id: 'pim-file-input',
+                                    ref: fileInputRef,
+                                    className: 'pim-hidden-input',
+                                    type: 'file',
+                                    multiple: true,
+                                    accept: 'image/jpeg,image/png,image/webp',
+                                    disabled: isUploading,
+                                    onChange: onFilesSelected
+                                }),
+                                createElement('label', { htmlFor: 'pim-file-input', className: 'pim-file-picker-btn' }, 'Choose images'),
+                                createElement(
+                                    'span',
+                                    { className: 'pim-file-picker-text' },
+                                    uploadQueue.length ? (uploadQueue.length + (uploadQueue.length === 1 ? ' file ready' : ' files ready')) : 'JPG, PNG, WEBP'
+                                )
+                            ),
                             createElement(
                                 'div',
                                 { className: 'pim-upload-actions-row' },
@@ -816,6 +859,12 @@
                         createElement(
                             'div',
                             { className: 'pim-upload-queue' },
+                            createElement(
+                                'div',
+                                { className: 'pim-upload-queue-head' },
+                                createElement('strong', null, 'Upload queue'),
+                                createElement('span', null, uploadQueue.length ? (uploadQueue.length + ' selected') : 'Empty')
+                            ),
                             !uploadQueue.length ? createElement('p', { className: 'pim-status' }, 'No files selected.') : null,
                             uploadQueue.map(function (entry, index) {
                                 var canMoveUp = index > 0;
@@ -879,7 +928,7 @@
                                 createElement(
                                     'div',
                                     { className: 'pim-image-meta' },
-                                    createElement('span', null, image.fileName),
+                                    createElement('span', null, decodeEntities(image.fileName || 'Image')),
                                     image.isFeatured ? createElement('span', { className: 'pim-badge' }, 'Featured') : null
                                 ),
                                 createElement(

@@ -75,7 +75,7 @@ class Product_Image_Manager_Ajax_Controller
 
             $products[] = array(
                 'id' => $product_id,
-                'name' => get_the_title($product_id),
+                'name' => html_entity_decode((string) get_the_title($product_id), ENT_QUOTES, 'UTF-8'),
                 'hasImages' => (bool) $has_images,
             );
         }

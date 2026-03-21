@@ -52,7 +52,7 @@ class Product_Image_Manager_Public
             foreach ($terms as $term) {
                 $bootstrap_categories[] = array(
                     'id' => (int) $term->term_id,
-                    'name' => $term->name,
+                    'name' => html_entity_decode((string) $term->name, ENT_QUOTES, 'UTF-8'),
                 );
             }
         }

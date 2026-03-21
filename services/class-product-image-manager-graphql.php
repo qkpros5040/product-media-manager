@@ -101,7 +101,7 @@ class Product_Image_Manager_GraphQL
                 foreach ($terms as $term) {
                     $data[] = array(
                         'id' => (int) $term->term_id,
-                        'name' => $term->name,
+                        'name' => html_entity_decode((string) $term->name, ENT_QUOTES, 'UTF-8'),
                     );
                 }
 
@@ -160,7 +160,7 @@ class Product_Image_Manager_GraphQL
 
                     $products[] = array(
                         'id' => (int) $product_id,
-                        'name' => get_the_title($product_id),
+                        'name' => html_entity_decode((string) get_the_title($product_id), ENT_QUOTES, 'UTF-8'),
                         'hasImages' => (bool) $has_images,
                     );
                 }
