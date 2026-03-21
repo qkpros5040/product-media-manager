@@ -33,7 +33,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
+          port: ${{ secrets.SSH_PORT != '' && secrets.SSH_PORT || 22 }}
           script: |
             cd /domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
             git pull origin main
