@@ -34,7 +34,5 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT != '' && secrets.SSH_PORT || 22 }}
-          script: pwd
-            ls /u109279988/domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
-            cd /u109279988/domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
+          script: cd /domains/nobleliftcanada.com/public_html/wp-content/plugins/product-media-manager
             git pull origin main
