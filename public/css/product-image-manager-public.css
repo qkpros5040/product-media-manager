@@ -102,20 +102,26 @@
     transition: 0.18s ease;
 }
 
+
 .pim-back-folder-btn {
-    border: 1px solid transparent;
-    background: linear-gradient(135deg, var(--pim-primary), #159287) !important;
+    border: 2px solid #0f766e;
+    background: linear-gradient(135deg, #0f766e 60%, #159287 100%) !important;
     color: #fff !important;
-    padding: 9px 14px;
-    font-size: 13px;
-    font-weight: 600;
+    padding: 12px 22px;
+    font-size: 16px;
+    font-weight: 700;
     cursor: pointer;
-    box-shadow: 0 10px 24px rgba(31, 94, 255, 0.18);
+    box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18), 0 2px 8px rgba(0,0,0,0.06);
+    border-radius: 999px;
+    transition: background 0.18s, box-shadow 0.18s, border 0.18s;
+    outline: none;
 }
 
 .pim-back-folder-btn:hover {
-    background: linear-gradient(135deg, var(--pim-primary-dark), #11736b) !important;
-    transform: translateY(-1px);
+    background: linear-gradient(135deg, #0a5c56 60%, #11736b 100%) !important;
+    border-color: #11736b;
+    box-shadow: 0 12px 28px rgba(15, 118, 110, 0.22), 0 2px 8px rgba(0,0,0,0.08);
+    transform: translateY(-2px) scale(1.04);
 }
 
 .pim-breadcrumb {
