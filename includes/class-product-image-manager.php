@@ -62,6 +62,7 @@ class Product_Image_Manager
         $this->loader->add_action('wp_ajax_pim_upload_product_images', $controller, 'upload_product_images');
         $this->loader->add_action('wp_ajax_pim_detach_product_image', $controller, 'detach_product_image');
         $this->loader->add_action('wp_ajax_pim_set_featured_image', $controller, 'set_featured_image');
+        $this->loader->add_action('wp_ajax_pim_reorder_gallery_images', $controller, 'reorder_gallery_images');
     }
 
     private function define_graphql_hooks()

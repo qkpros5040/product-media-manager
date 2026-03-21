@@ -177,6 +177,14 @@
         var productWindowStart = _useState15[0];
         var setProductWindowStart = _useState15[1];
 
+        var _useState16 = useState(null);
+        var draggingGalleryImageId = _useState16[0];
+        var setDraggingGalleryImageId = _useState16[1];
+
+        var _useState17 = useState(null);
+        var galleryDropIndicator = _useState17[0];
+        var setGalleryDropIndicator = _useState17[1];
+
         var activeProductsRequestRef = useRef(0);
         var fileInputRef = useRef(null);
         var productsViewportRef = useRef(null);
@@ -567,6 +575,198 @@
             }
         }
 
+        async function onReorderGallery(nextGalleryIds, previousImages) {
+            try {
+                if (pimConfig.hasWpGraphql) {
+                    await requestGraphQL(
+                        'mutation PIMReorderGallery($productId: Int!, $attachmentIds: [Int]) { pimReorderGalleryImages(input: { productId: $productId, attachmentIds: $attachmentIds }) { success message } }',
+                        {
+                            productId: selectedProduct.id,
+                            attachmentIds: nextGalleryIds
+                        }
+                    );
+                    return;
+                }
+
+                await requestLegacy('pim_reorder_gallery_images', {
+                    productId: selectedProduct.id,
+                    attachmentIds: JSON.stringify(nextGalleryIds)
+                });
+            } catch (error) {
+                try {
+                    await requestLegacy('pim_reorder_gallery_images', {
+                        productId: selectedProduct.id,
+                        attachmentIds: JSON.stringify(nextGalleryIds)
+                    });
+                    setStatus((pimConfig.messages && pimConfig.messages.graphqlUnavailable) || 'GraphQL unavailable. Action completed with fallback.');
+                } catch (fallbackError) {
+                    updateImagesForProduct(selectedProduct.id, previousImages);
+                    setStatus(fallbackError.message || error.message);
+                }
+            }
+        }
+
+        function moveGalleryImage(imageId, direction) {
+            if (!selectedProduct || !selectedProduct.id) {
+                return;
+            }
+
+            var previousImages = images.slice();
+            var featured = previousImages.find(function (image) {
+                return !!image.isFeatured;
+            }) || null;
+            var gallery = previousImages.filter(function (image) {
+                return !image.isFeatured;
+            });
+
+            var index = gallery.findIndex(function (image) {
+                return Number(image.id) === Number(imageId);
+            });
+
+            if (index === -1) {
+                return;
+            }
+
+            var targetIndex = direction === 'up' ? index - 1 : index + 1;
+            if (targetIndex < 0 || targetIndex >= gallery.length) {
+                return;
+            }
+
+            var swapped = gallery.slice();
+            var current = swapped[index];
+            swapped[index] = swapped[targetIndex];
+            swapped[targetIndex] = current;
+
+            var nextImages = featured ? [featured].concat(swapped) : swapped;
+            updateImagesForProduct(selectedProduct.id, nextImages);
+
+            onReorderGallery(swapped.map(function (image) {
+                return Number(image.id);
+            }), previousImages);
+        }
+
+        function reorderGalleryByIds(sourceImageId, targetImageId, position) {
+            if (!selectedProduct || !selectedProduct.id || Number(sourceImageId) === Number(targetImageId)) {
+                return;
+            }
+
+            var previousImages = images.slice();
+            var featured = previousImages.find(function (image) {
+                return !!image.isFeatured;
+            }) || null;
+            var gallery = previousImages.filter(function (image) {
+                return !image.isFeatured;
+            });
+
+            var fromIndex = gallery.findIndex(function (image) {
+                return Number(image.id) === Number(sourceImageId);
+            });
+
+            var toIndex = gallery.findIndex(function (image) {
+                return Number(image.id) === Number(targetImageId);
+            });
+
+            if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+                return;
+            }
+
+            var reorderedGallery = gallery.slice();
+            var moved = reorderedGallery.splice(fromIndex, 1)[0];
+            var safePosition = position === 'after' ? 'after' : 'before';
+            var insertIndex = toIndex;
+
+            if (safePosition === 'before') {
+                insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+            } else {
+                insertIndex = fromIndex < toIndex ? toIndex : toIndex + 1;
+            }
+
+            if (insertIndex < 0) {
+                insertIndex = 0;
+            }
+
+            if (insertIndex > reorderedGallery.length) {
+                insertIndex = reorderedGallery.length;
+            }
+
+            reorderedGallery.splice(insertIndex, 0, moved);
+
+            var nextImages = featured ? [featured].concat(reorderedGallery) : reorderedGallery;
+            updateImagesForProduct(selectedProduct.id, nextImages);
+
+            onReorderGallery(reorderedGallery.map(function (image) {
+                return Number(image.id);
+            }), previousImages);
+        }
+
+        function onGalleryDragStart(imageId, event) {
+            setDraggingGalleryImageId(Number(imageId));
+            setGalleryDropIndicator(null);
+
+            if (event && event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', String(imageId));
+            }
+        }
+
+        function onGalleryDragOver(targetImageId, event) {
+            if (event) {
+                event.preventDefault();
+
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'move';
+                }
+            }
+
+            if (!draggingGalleryImageId || !event || !event.currentTarget) {
+                return;
+            }
+
+            var bounds = event.currentTarget.getBoundingClientRect();
+            var isBefore = (event.clientY - bounds.top) < (bounds.height / 2);
+            var nextPosition = isBefore ? 'before' : 'after';
+
+            setGalleryDropIndicator(function (prev) {
+                if (prev && Number(prev.targetImageId) === Number(targetImageId) && prev.position === nextPosition) {
+                    return prev;
+                }
+
+                return {
+                    targetImageId: Number(targetImageId),
+                    position: nextPosition
+                };
+            });
+        }
+
+        function onGalleryDrop(targetImageId, event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            var sourceImageId = draggingGalleryImageId;
+
+            if (!sourceImageId && event && event.dataTransfer) {
+                sourceImageId = Number(event.dataTransfer.getData('text/plain'));
+            }
+
+            setDraggingGalleryImageId(null);
+            var dropPosition = galleryDropIndicator && Number(galleryDropIndicator.targetImageId) === Number(targetImageId)
+                ? galleryDropIndicator.position
+                : 'before';
+            setGalleryDropIndicator(null);
+
+            if (!sourceImageId) {
+                return;
+            }
+
+            reorderGalleryByIds(Number(sourceImageId), Number(targetImageId), dropPosition);
+        }
+
+        function onGalleryDragEnd() {
+            setDraggingGalleryImageId(null);
+            setGalleryDropIndicator(null);
+        }
+
         async function onUpload(event) {
             event.preventDefault();
 
@@ -888,6 +1088,18 @@
 
         var selectedCategoryId = selectedCategory ? Number(selectedCategory.id) : null;
         var selectedProductId = selectedProduct ? Number(selectedProduct.id) : null;
+        var featuredImage = null;
+        var galleryImages = images;
+
+        if (selectedProduct) {
+            featuredImage = images.find(function (image) {
+                return !!image.isFeatured;
+            }) || null;
+            galleryImages = images.filter(function (image) {
+                return !image.isFeatured;
+            });
+        }
+
         var productColumns = getProductsColumnCount();
         var windowSize = productColumns * 12;
         var clampedStart = Math.max(0, Math.min(productWindowStart, Math.max(0, products.length - 1)));
@@ -1007,27 +1219,27 @@
                                             'div',
                                             { className: 'pim-products-grid' },
                                             !isLoadingProducts ? visibleProducts.map(function (product) {
-                                            var productId = Number(product.id);
-                                            var isActiveProduct = selectedProductId === productId;
+                                                var productId = Number(product.id);
+                                                var isActiveProduct = selectedProductId === productId;
 
-                                            return createElement(
-                                                'button',
-                                                {
-                                                    key: productId,
-                                                    className: 'pim-tree-item pim-tree-item-product' + (isActiveProduct ? ' is-active' : ''),
-                                                    type: 'button',
-                                                    onClick: function () {
-                                                        openProduct(product);
-                                                    }
-                                                },
-                                                createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
-                                                createElement(
-                                                    'span',
-                                                    { className: 'pim-tree-product-copy' },
-                                                    createElement('span', { className: 'pim-tree-label' }, decodeEntities(product.name)),
-                                                    createElement('span', { className: 'pim-tree-meta' }, product.hasImages ? 'Has images' : 'No images yet')
-                                                )
-                                            );
+                                                return createElement(
+                                                    'button',
+                                                    {
+                                                        key: productId,
+                                                        className: 'pim-tree-item pim-tree-item-product' + (isActiveProduct ? ' is-active' : ''),
+                                                        type: 'button',
+                                                        onClick: function () {
+                                                            openProduct(product);
+                                                        }
+                                                    },
+                                                    createElement('span', { className: 'pim-tree-icon' }, product.hasImages ? '\ud83d\uddbc\ufe0f' : '\ud83d\uddc2\ufe0f'),
+                                                    createElement(
+                                                        'span',
+                                                        { className: 'pim-tree-product-copy' },
+                                                        createElement('span', { className: 'pim-tree-label' }, decodeEntities(product.name)),
+                                                        createElement('span', { className: 'pim-tree-meta' }, product.hasImages ? 'Has images' : 'No images yet')
+                                                    )
+                                                );
                                             }) : null
                                         ),
                                         createElement('div', {
@@ -1176,26 +1388,91 @@
                         )
                     ) : null,
                     createElement('div', { className: 'pim-status' }, status),
+                    selectedProduct ? createElement(
+                        'div',
+                        { className: 'pim-media-section' },
+                        createElement('h4', { className: 'pim-media-section-title' }, 'Featured Image'),
+                        featuredImage ? createElement(
+                            'article',
+                            { className: 'pim-image-card pim-image-card-featured', key: 'featured-' + featuredImage.id },
+                            createElement('img', { src: featuredImage.url, alt: featuredImage.fileName || '' }),
+                            createElement(
+                                'div',
+                                { className: 'pim-image-meta' },
+                                createElement('span', null, decodeEntities(featuredImage.fileName || 'Image')),
+                                createElement('span', { className: 'pim-badge' }, 'Featured')
+                            ),
+                            createElement(
+                                'div',
+                                { className: 'pim-actions' },
+                                createElement('button', {
+                                    className: 'button button-danger',
+                                    type: 'button',
+                                    onClick: function () { onDetach(Number(featuredImage.id)); }
+                                }, 'Detach')
+                            )
+                        ) : createElement('p', { className: 'pim-status' }, 'No featured image set.')
+                    ) : null,
+                    selectedProduct ? createElement(
+                        'div',
+                        { className: 'pim-media-section' },
+                        createElement('h4', { className: 'pim-media-section-title' }, 'Gallery Images'),
+                        !galleryImages.length ? createElement('p', { className: 'pim-status' }, 'No gallery images yet.') : null
+                    ) : null,
                     createElement(
                         'div',
                         { className: 'pim-image-grid' },
-                        selectedProduct && !images.length ? createElement('p', { className: 'pim-status' }, 'No images yet. Upload files to this product folder.') : null,
-                        selectedProduct ? images.map(function (image) {
+                        selectedProduct ? galleryImages.map(function (image, galleryIndex) {
+                            var isDragging = Number(draggingGalleryImageId) === Number(image.id);
+                            var indicatorPosition = galleryDropIndicator && Number(galleryDropIndicator.targetImageId) === Number(image.id)
+                                ? galleryDropIndicator.position
+                                : '';
+                            var dropIndicatorClass = indicatorPosition ? (' is-drop-target drop-' + indicatorPosition) : '';
+
                             return createElement(
                                 'article',
-                                { className: 'pim-image-card', key: image.id },
+                                {
+                                    className: 'pim-image-card pim-image-card-gallery' + (isDragging ? ' is-dragging' : '') + dropIndicatorClass,
+                                    key: image.id,
+                                    draggable: true,
+                                    onDragStart: function (event) { onGalleryDragStart(Number(image.id), event); },
+                                    onDragOver: function (event) { onGalleryDragOver(Number(image.id), event); },
+                                    onDrop: function (event) { onGalleryDrop(Number(image.id), event); },
+                                    onDragEnd: onGalleryDragEnd
+                                },
                                 createElement('img', { src: image.url, alt: image.fileName || '' }),
                                 createElement(
                                     'div',
                                     { className: 'pim-image-meta' },
                                     createElement('span', null, decodeEntities(image.fileName || 'Image')),
-                                    image.isFeatured ? createElement('span', { className: 'pim-badge' }, 'Featured') : null
+                                    createElement('span', { className: 'pim-badge pim-badge-muted' }, 'Gallery')
                                 ),
                                 createElement(
                                     'div',
                                     { className: 'pim-actions' },
-                                    createElement('button', { className: 'button', type: 'button', onClick: function () { onSetFeatured(Number(image.id)); } }, 'Set Featured'),
-                                    createElement('button', { className: 'button', type: 'button', onClick: function () { onDetach(Number(image.id)); } }, 'Detach')
+                                    createElement('span', { className: 'pim-drag-handle', title: 'Drag to reorder', ariaHidden: 'true' }, '\u2630'),
+                                    createElement('button', {
+                                        className: 'button button-ghost',
+                                        type: 'button',
+                                        disabled: galleryIndex === 0,
+                                        onClick: function () { moveGalleryImage(Number(image.id), 'up'); }
+                                    }, 'Move Up'),
+                                    createElement('button', {
+                                        className: 'button button-ghost',
+                                        type: 'button',
+                                        disabled: galleryIndex === galleryImages.length - 1,
+                                        onClick: function () { moveGalleryImage(Number(image.id), 'down'); }
+                                    }, 'Move Down'),
+                                    createElement('button', {
+                                        className: 'button button-primary',
+                                        type: 'button',
+                                        onClick: function () { onSetFeatured(Number(image.id)); }
+                                    }, 'Set Featured'),
+                                    createElement('button', {
+                                        className: 'button button-danger',
+                                        type: 'button',
+                                        onClick: function () { onDetach(Number(image.id)); }
+                                    }, 'Detach')
                                 )
                             );
                         }) : null

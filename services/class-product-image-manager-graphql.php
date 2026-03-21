@@ -241,6 +241,31 @@ class Product_Image_Manager_GraphQL
             },
         ));
 
+        register_graphql_mutation('pimReorderGalleryImages', array(
+            'inputFields' => array(
+                'productId' => array('type' => 'Int'),
+                'attachmentIds' => array('type' => array('list_of' => 'Int')),
+            ),
+            'outputFields' => array(
+                'success' => array('type' => 'Boolean'),
+                'message' => array('type' => 'String'),
+            ),
+            'mutateAndGetPayload' => function ($input) {
+                $this->authorize_graphql();
+
+                $product_id = isset($input['productId']) ? absint($input['productId']) : 0;
+                if (!$product_id) {
+                    throw new GraphQL\Error\UserError(__('Product is required.', 'product-image-manager'));
+                }
+
+                $attachment_ids = isset($input['attachmentIds']) && is_array($input['attachmentIds'])
+                    ? array_map('absint', $input['attachmentIds'])
+                    : array();
+
+                return $this->media_handler->reorder_gallery_images($product_id, $attachment_ids);
+            },
+        ));
+
         if ($this->has_upload_scalar()) {
             register_graphql_mutation('pimUploadProductImages', array(
                 'inputFields' => array(

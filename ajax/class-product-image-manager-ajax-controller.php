@@ -158,4 +158,36 @@ class Product_Image_Manager_Ajax_Controller
 
         wp_send_json_success($result);
     }
+
+    public function reorder_gallery_images()
+    {
+        $this->authorize_request();
+
+        $product_id = isset($_POST['productId']) ? absint($_POST['productId']) : 0;
+        if (!$product_id) {
+            wp_send_json_error(array('message' => __('Product is required.', 'product-image-manager')), 400);
+        }
+
+        $attachment_ids = array();
+        if (isset($_POST['attachmentIds'])) {
+            $raw_ids = wp_unslash($_POST['attachmentIds']);
+
+            if (is_array($raw_ids)) {
+                $attachment_ids = array_map('absint', $raw_ids);
+            } else {
+                $decoded = json_decode((string) $raw_ids, true);
+                if (is_array($decoded)) {
+                    $attachment_ids = array_map('absint', $decoded);
+                }
+            }
+        }
+
+        $result = $this->media_handler->reorder_gallery_images($product_id, $attachment_ids);
+
+        if (!$result['success']) {
+            wp_send_json_error($result, 400);
+        }
+
+        wp_send_json_success($result);
+    }
 }

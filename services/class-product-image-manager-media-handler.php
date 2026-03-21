@@ -155,6 +155,33 @@ class Product_Image_Manager_Media_Handler
         return array('success' => true, 'message' => __('Featured image updated.', 'product-image-manager'));
     }
 
+    public function reorder_gallery_images($product_id, $attachment_ids)
+    {
+        $featured_id = (int) get_post_thumbnail_id($product_id);
+        $gallery_raw = get_post_meta($product_id, '_product_image_gallery', true);
+        $existing_ids = array_values(array_filter(array_map('absint', explode(',', (string) $gallery_raw)), function ($id) use ($featured_id) {
+            return (int) $id !== $featured_id;
+        }));
+
+        if (empty($existing_ids)) {
+            return array('success' => true, 'message' => __('Gallery order updated.', 'product-image-manager'));
+        }
+
+        $requested_ids = array_values(array_unique(array_filter(array_map('absint', (array) $attachment_ids))));
+        $requested_ids = array_values(array_filter($requested_ids, function ($id) use ($existing_ids) {
+            return in_array((int) $id, $existing_ids, true);
+        }));
+
+        $remaining_ids = array_values(array_filter($existing_ids, function ($id) use ($requested_ids) {
+            return !in_array((int) $id, $requested_ids, true);
+        }));
+
+        $new_order = array_merge($requested_ids, $remaining_ids);
+        update_post_meta($product_id, '_product_image_gallery', implode(',', $new_order));
+
+        return array('success' => true, 'message' => __('Gallery order updated.', 'product-image-manager'));
+    }
+
     private function validate_file($file)
     {
         if (!empty($file['error'])) {
