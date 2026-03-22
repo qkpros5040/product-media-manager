@@ -100,8 +100,29 @@ class Product_Image_Manager_Public
 
     private function can_access_manager()
     {
-        return current_user_can('manage_product_images') || 
-               current_user_can('manage_options') || 
-               current_user_can('manage_woocommerce');
+        // Standard WP capabilities
+        if (
+            current_user_can('manage_product_images') ||
+            current_user_can('manage_options') ||
+            current_user_can('manage_woocommerce')
+        ) {
+            return true;
+        }
+
+        // ACF field check for user permission
+        if (function_exists('get_field')) {
+            $user_id = get_current_user_id();
+            if ($user_id) {
+                $access = get_field('access_in_dashboard', 'user_' . $user_id);
+                if (is_array($access)) {
+                    // If field is a multi-select or checkbox
+                    return in_array('productmanager', $access, true);
+                } elseif (is_string($access)) {
+                    // If field is a single select or text
+                    return $access === 'productmanager';
+                }
+            }
+        }
+        return false;
     }
 }
