@@ -145,12 +145,42 @@ class Product_Image_Manager_Media_Handler
 
     public function set_featured_image($product_id, $attachment_id)
     {
+        $product_id = absint($product_id);
+        $attachment_id = absint($attachment_id);
+
+        $previous_featured_id = (int) get_post_thumbnail_id($product_id);
+
+        $gallery_raw = get_post_meta($product_id, '_product_image_gallery', true);
+        $original_gallery_ids = array_values(array_filter(array_map('absint', explode(',', (string) $gallery_raw))));
+
+        $swap_index = array_search((int) $attachment_id, $original_gallery_ids, true);
+
         $updated = set_post_thumbnail($product_id, $attachment_id);
         if (!$updated) {
             return array('success' => false, 'message' => __('Unable to set featured image.', 'product-image-manager'));
         }
 
-        $this->remove_from_gallery($product_id, $attachment_id);
+        // Keep gallery in sync:
+        // - Remove the new featured image from gallery.
+        // - Move the previous featured image into the gallery (swap), ideally at the spot
+        //   where the new featured image came from.
+        $gallery_ids = array_values(array_filter($original_gallery_ids, function ($id) use ($previous_featured_id, $attachment_id) {
+            return (int) $id !== (int) $previous_featured_id && (int) $id !== (int) $attachment_id;
+        }));
+
+        if ($previous_featured_id && (int) $previous_featured_id !== (int) $attachment_id) {
+            if ($swap_index !== false) {
+                $swap_index = max(0, (int) $swap_index);
+                if ($swap_index > count($gallery_ids)) {
+                    $swap_index = count($gallery_ids);
+                }
+                array_splice($gallery_ids, $swap_index, 0, array((int) $previous_featured_id));
+            } else {
+                $gallery_ids[] = (int) $previous_featured_id;
+            }
+        }
+
+        update_post_meta($product_id, '_product_image_gallery', implode(',', $gallery_ids));
 
         return array('success' => true, 'message' => __('Featured image updated.', 'product-image-manager'));
     }

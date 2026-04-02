@@ -185,6 +185,14 @@
         var galleryDropIndicator = _useState17[0];
         var setGalleryDropIndicator = _useState17[1];
 
+        var _useState18 = useState(false);
+        var isFeaturedDropActive = _useState18[0];
+        var setIsFeaturedDropActive = _useState18[1];
+
+        var _useState19 = useState(false);
+        var isUploadDropActive = _useState19[0];
+        var setIsUploadDropActive = _useState19[1];
+
         var activeProductsRequestRef = useRef(0);
         var fileInputRef = useRef(null);
         var productsViewportRef = useRef(null);
@@ -702,6 +710,7 @@
         function onGalleryDragStart(imageId, event) {
             setDraggingGalleryImageId(Number(imageId));
             setGalleryDropIndicator(null);
+            setIsFeaturedDropActive(false);
 
             if (event && event.dataTransfer) {
                 event.dataTransfer.effectAllowed = 'move';
@@ -765,6 +774,127 @@
         function onGalleryDragEnd() {
             setDraggingGalleryImageId(null);
             setGalleryDropIndicator(null);
+            setIsFeaturedDropActive(false);
+        }
+
+        function onFeaturedDragOver(event) {
+            if (!event || !event.dataTransfer) {
+                return;
+            }
+
+            // Ignore file drags (upload dropzone handles those).
+            if (event.dataTransfer.files && event.dataTransfer.files.length) {
+                return;
+            }
+
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setIsFeaturedDropActive(true);
+        }
+
+        function onFeaturedDragLeave() {
+            setIsFeaturedDropActive(false);
+        }
+
+        function onFeaturedDrop(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            setIsFeaturedDropActive(false);
+
+            if (!selectedProduct || !selectedProduct.id) {
+                return;
+            }
+
+            if (event && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length) {
+                return;
+            }
+
+            var sourceImageId = draggingGalleryImageId;
+
+            if (!sourceImageId && event && event.dataTransfer) {
+                sourceImageId = Number(event.dataTransfer.getData('text/plain'));
+            }
+
+            if (!sourceImageId) {
+                return;
+            }
+
+            onSetFeatured(Number(sourceImageId));
+        }
+
+        function addFilesToQueue(files) {
+            if (isUploading) {
+                return;
+            }
+
+            var allowedTypes = {
+                'image/jpeg': true,
+                'image/png': true,
+                'image/webp': true
+            };
+
+            var accepted = (files || []).filter(function (file) {
+                return file && allowedTypes[file.type];
+            });
+
+            if (!accepted.length) {
+                return;
+            }
+
+            var mapped = accepted.map(function (file, index) {
+                return {
+                    id: Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2),
+                    file: file,
+                    progress: 0,
+                    status: 'queued',
+                    errorMessage: '',
+                    previewUrl: URL.createObjectURL(file)
+                };
+            });
+
+            setUploadQueue(function (prev) {
+                return prev.concat(mapped);
+            });
+        }
+
+        function onUploadDragOver(event) {
+            if (!event || !event.dataTransfer) {
+                return;
+            }
+
+            var types = event.dataTransfer.types || [];
+            var hasFiles = Array.prototype.indexOf.call(types, 'Files') !== -1;
+            if (!hasFiles) {
+                return;
+            }
+
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            setIsUploadDropActive(true);
+        }
+
+        function onUploadDragLeave() {
+            setIsUploadDropActive(false);
+        }
+
+        function onUploadDrop(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            setIsUploadDropActive(false);
+
+            if (isUploading) {
+                return;
+            }
+
+            if (!event || !event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) {
+                return;
+            }
+
+            addFilesToQueue(Array.prototype.slice.call(event.dataTransfer.files));
         }
 
         async function onUpload(event) {
@@ -881,20 +1011,7 @@
                 return;
             }
 
-            var mapped = files.map(function (file, index) {
-                return {
-                    id: Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2),
-                    file: file,
-                    progress: 0,
-                    status: 'queued',
-                    errorMessage: '',
-                    previewUrl: URL.createObjectURL(file)
-                };
-            });
-
-            setUploadQueue(function (prev) {
-                return prev.concat(mapped);
-            });
+            addFilesToQueue(files);
 
             if (fileInputRef.current) {
                 fileInputRef.current.value = '';
@@ -1291,7 +1408,13 @@
                         { className: 'pim-upload', onSubmit: onUpload },
                         createElement(
                             'div',
-                            { className: 'pim-uploader-box' },
+                            {
+                                className: 'pim-uploader-box' + (isUploadDropActive ? ' is-drop-active' : ''),
+                                onDragOver: onUploadDragOver,
+                                onDragEnter: onUploadDragOver,
+                                onDragLeave: onUploadDragLeave,
+                                onDrop: onUploadDrop
+                            },
                             createElement(
                                 'div',
                                 { className: 'pim-file-picker' },
@@ -1309,7 +1432,7 @@
                                 createElement(
                                     'span',
                                     { className: 'pim-file-picker-text' },
-                                    uploadQueue.length ? (uploadQueue.length + (uploadQueue.length === 1 ? ' file ready' : ' files ready')) : 'JPG, PNG, WEBP'
+                                    uploadQueue.length ? (uploadQueue.length + (uploadQueue.length === 1 ? ' file ready' : ' files ready')) : 'JPG, PNG, WEBP — or drag & drop'
                                 )
                             ),
                             createElement(
@@ -1394,7 +1517,14 @@
                         createElement('h4', { className: 'pim-media-section-title' }, 'Featured Image'),
                         featuredImage ? createElement(
                             'article',
-                            { className: 'pim-image-card pim-image-card-featured', key: 'featured-' + featuredImage.id },
+                            {
+                                className: 'pim-image-card pim-image-card-featured' + (isFeaturedDropActive ? ' is-drop-active' : ''),
+                                key: 'featured-' + featuredImage.id,
+                                onDragOver: onFeaturedDragOver,
+                                onDragEnter: onFeaturedDragOver,
+                                onDragLeave: onFeaturedDragLeave,
+                                onDrop: onFeaturedDrop
+                            },
                             createElement('img', { src: featuredImage.url, alt: featuredImage.fileName || '' }),
                             createElement(
                                 'div',
@@ -1411,7 +1541,17 @@
                                     onClick: function () { onDetach(Number(featuredImage.id)); }
                                 }, 'Detach')
                             )
-                        ) : createElement('p', { className: 'pim-status' }, 'No featured image set.')
+                        ) : createElement(
+                            'div',
+                            {
+                                className: 'pim-featured-empty' + (isFeaturedDropActive ? ' is-drop-active' : ''),
+                                onDragOver: onFeaturedDragOver,
+                                onDragEnter: onFeaturedDragOver,
+                                onDragLeave: onFeaturedDragLeave,
+                                onDrop: onFeaturedDrop
+                            },
+                            createElement('p', { className: 'pim-status' }, 'No featured image set. Drag a gallery image here.')
+                        )
                     ) : null,
                     selectedProduct ? createElement(
                         'div',

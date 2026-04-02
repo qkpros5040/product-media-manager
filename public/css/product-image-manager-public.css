@@ -396,6 +396,11 @@
     gap: 12px;
 }
 
+.pim-uploader-box.is-drop-active {
+    border-color: #7cbeb5;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
 .pim-hidden-input {
     position: absolute;
     width: 1px;
@@ -622,6 +627,23 @@
 .pim-image-card-featured {
     border-color: #9bd0c8;
     background: linear-gradient(180deg, #fbfffe 0%, #f2fbf9 100%);
+}
+
+.pim-image-card-featured.is-drop-active {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.pim-featured-empty {
+    border: 2px dashed var(--pim-border-strong);
+    border-radius: 18px;
+    padding: 14px;
+    background: #fff;
+}
+
+.pim-featured-empty.is-drop-active {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
 
 .pim-image-card {
