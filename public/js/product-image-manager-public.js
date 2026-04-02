@@ -193,12 +193,17 @@
         var isUploadDropActive = _useState19[0];
         var setIsUploadDropActive = _useState19[1];
 
+        var _useState20 = useState(false);
+        var isPageFileDropActive = _useState20[0];
+        var setIsPageFileDropActive = _useState20[1];
+
         var activeProductsRequestRef = useRef(0);
         var fileInputRef = useRef(null);
         var productsViewportRef = useRef(null);
         var productsCacheRef = useRef({});
         var imagesCacheRef = useRef({});
         var productsPrefetchingRef = useRef({});
+        var pageFileDragDepthRef = useRef(0);
 
         useEffect(function () {
             async function loadCategories() {
@@ -859,6 +864,69 @@
             });
         }
 
+        function isFilesDragEvent(event) {
+            if (!event || !event.dataTransfer) {
+                return false;
+            }
+
+            var types = event.dataTransfer.types || [];
+            return Array.prototype.indexOf.call(types, 'Files') !== -1;
+        }
+
+        function onPageDragEnter(event) {
+            if (!isFilesDragEvent(event)) {
+                return;
+            }
+
+            event.preventDefault();
+            pageFileDragDepthRef.current = (pageFileDragDepthRef.current || 0) + 1;
+            setIsPageFileDropActive(true);
+        }
+
+        function onPageDragOver(event) {
+            if (!isFilesDragEvent(event)) {
+                return;
+            }
+
+            event.preventDefault();
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
+            }
+            setIsPageFileDropActive(true);
+        }
+
+        function onPageDragLeave(event) {
+            if (!isFilesDragEvent(event)) {
+                return;
+            }
+
+            pageFileDragDepthRef.current = Math.max(0, (pageFileDragDepthRef.current || 0) - 1);
+            if (!pageFileDragDepthRef.current) {
+                setIsPageFileDropActive(false);
+            }
+        }
+
+        function onPageDrop(event) {
+            if (!isFilesDragEvent(event)) {
+                return;
+            }
+
+            event.preventDefault();
+            pageFileDragDepthRef.current = 0;
+            setIsPageFileDropActive(false);
+
+            if (!selectedProduct || !selectedProduct.id) {
+                setStatus('Select a product first.');
+                return;
+            }
+
+            if (!event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) {
+                return;
+            }
+
+            addFilesToQueue(Array.prototype.slice.call(event.dataTransfer.files));
+        }
+
         function onUploadDragOver(event) {
             if (!event || !event.dataTransfer) {
                 return;
@@ -1227,7 +1295,22 @@
 
         return createElement(
             'div',
-            { className: 'pim-app' },
+            {
+                className: 'pim-app',
+                onDragEnter: onPageDragEnter,
+                onDragOver: onPageDragOver,
+                onDragLeave: onPageDragLeave,
+                onDrop: onPageDrop
+            },
+            createElement(
+                'div',
+                { className: 'pim-drop-overlay' + (isPageFileDropActive ? ' is-active' : '') },
+                createElement(
+                    'div',
+                    { className: 'pim-drop-overlay-inner' },
+                    selectedProduct ? 'Drop images to add to the upload queue' : 'Select a product first'
+                )
+            ),
             createElement(
                 'div',
                 { className: 'pim-header' },
