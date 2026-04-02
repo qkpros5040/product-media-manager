@@ -938,17 +938,26 @@
                 return;
             }
 
+            event.stopPropagation();
             event.preventDefault();
             event.dataTransfer.dropEffect = 'copy';
             setIsUploadDropActive(true);
         }
 
-        function onUploadDragLeave() {
+        function onUploadDragLeave(event) {
+            if (event && event.dataTransfer) {
+                var types = event.dataTransfer.types || [];
+                var hasFiles = Array.prototype.indexOf.call(types, 'Files') !== -1;
+                if (hasFiles) {
+                    event.stopPropagation();
+                }
+            }
             setIsUploadDropActive(false);
         }
 
         function onUploadDrop(event) {
             if (event) {
+                event.stopPropagation();
                 event.preventDefault();
             }
 
